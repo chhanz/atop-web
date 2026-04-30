@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>atop-web</title>
+    <!--BASE_HREF-->
+    <link rel="stylesheet" href="static/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="static/vendor/marked.min.js" defer></script>
+    <script src="static/vendor/purify.min.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1>atop-web</h1>
+        <div id="sysinfo" class="sysinfo">no session loaded</div>
+      </div>
+
+      <div class="topbar-actions">
+        <button type="button" id="open-picker" class="primary">Pick log</button>
+        <label class="tz-picker">
+          <span class="muted small">TZ</span>
+          <select id="tz-select">
+            <option value="utc">UTC</option>
+            <option value="local" id="tz-local-option">Local</option>
+          </select>
+        </label>
+        <button type="button" id="chat-toggle" class="icon-toggle" hidden aria-pressed="false" aria-controls="chat-panel" aria-label="Toggle AI chat panel" title="Toggle AI chat panel">🤖 Chat</button>
+        <button type="button" id="theme-toggle" aria-pressed="false" title="Toggle light and dark theme">Theme</button>
+      </div>
+    </header>
+
+    <section id="progress-bar-wrap" class="progress-bar-wrap" hidden>
+      <div class="progress-head">
+        <span id="progress-stage">preparing</span>
+        <span id="progress-percent">0%</span>
+        <button type="button" id="progress-retry" class="linkish" hidden>Retry</button>
+      </div>
+      <div class="progress-track">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <div id="progress-detail" class="progress-detail" hidden></div>
+      <div id="progress-error" class="progress-error" hidden></div>
+    </section>
+
+    <section id="time-range" class="time-range" hidden>
+      <label>
+        <span class="muted small">From</span>
+        <input type="text" id="range-from" class="range-input" placeholder="YYYY-MM-DD HH:MM:SS" autocomplete="off" spellcheck="false" />
+      </label>
+      <label>
+        <span class="muted small">To</span>
+        <input type="text" id="range-to" class="range-input" placeholder="YYYY-MM-DD HH:MM:SS" autocomplete="off" spellcheck="false" />
+      </label>
+      <div class="range-presets">
+        <button type="button" data-range="all" class="linkish">All</button>
+        <button type="button" data-range="15m" class="linkish">15m</button>
+        <button type="button" data-range="1h" class="linkish">1h</button>
+        <button type="button" data-range="3h" class="linkish">3h</button>
+        <button type="button" data-range="6h" class="linkish">6h</button>
+        <button type="button" id="range-apply">Apply</button>
+      </div>
+      <span id="range-summary" class="muted small"></span>
+      <span id="range-error" class="muted small range-error" hidden></span>
+    </section>
+
+    <section id="briefing" class="briefing" hidden>
+      <div class="briefing-head">
+        <h2>AI briefing</h2>
+        <span id="briefing-meta" class="muted small"></span>
+        <button type="button" id="briefing-regen" class="linkish">regenerate</button>
+      </div>
+      <div id="briefing-body" class="briefing-body">
+        <span class="muted">loading...</span>
+      </div>
+    </section>
+
+    <main id="main-grid">
+      <section id="charts">
+        <div class="chart-card">
+          <div class="chart-head">
+            <h2 id="chart-cpu-title" data-tip="System wide CPU counters from atop sstat (cpustat, v2.12.x layout). Stack layers follow /proc/stat semantics: user, nice, system, irq, softirq, steal, guest, iowait, idle. ticks = raw clock tick accumulator; % = ticks / (hertz x interval x ncpu) x 100. Source: photosyst.h.">CPU (system wide %)</h2>
+            <div class="pill-group" role="group" aria-label="CPU unit">
+              <button type="button" class="pill" data-cpu-unit="ticks">ticks</button>
+              <button type="button" class="pill active" data-cpu-unit="pct">%</button>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-cpu"></canvas></div>
+          <div id="chart-cpu-placeholder" class="chart-placeholder" hidden></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head">
+            <h2 id="chart-mem-title" data-tip="System wide memory counters from atop sstat (memstat, v2.12.x layout). Stack formula: used = physmem - freemem - cachemem - buffermem - slabmem. Sources: photosyst.h and showsys.c in the atop source tree.">System memory (MiB)</h2>
+            <div class="chart-head-toggles">
+              <div class="pill-group" role="group" aria-label="System memory view">
+                <button type="button" class="pill active" data-sysmem-view="memory">Memory</button>
+                <button type="button" class="pill" data-sysmem-view="available">Available</button>
+                <button type="button" class="pill" data-sysmem-view="swap">Swap</button>
+              </div>
+              <div class="pill-group" role="group" aria-label="System memory unit">
+                <button type="button" class="pill active" data-sysmem-unit="mib">MiB</button>
+                <button type="button" class="pill" data-sysmem-unit="gib">GiB</button>
+              </div>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-mem"></canvas></div>
+          <div id="chart-mem-placeholder" class="chart-placeholder" hidden></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head">
+            <h2 id="chart-dsk-title" data-tip="Per device disk counters from atop sstat (dskstat, v2.12.x layout). Values are kernel counters (reads, writes, 512 byte sectors, I/O milliseconds). The chart shows per sample deltas divided by the sample interval: IOPS for reads/writes per second, or MiB/s for throughput (sectors x 512 / 1024 / 1024 / interval). Source: photosyst.h.">Disk I/O</h2>
+            <div class="chart-head-toggles">
+              <select id="disk-device" class="disk-device" aria-label="Disk device"></select>
+              <div class="pill-group" role="group" aria-label="Disk unit">
+                <button type="button" class="pill active" data-disk-unit="iops">IOPS</button>
+                <button type="button" class="pill" data-disk-unit="mibs">MiB/s</button>
+              </div>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-dsk"></canvas></div>
+          <div id="chart-dsk-placeholder" class="chart-placeholder" hidden></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head">
+            <h2 id="chart-net-title" data-tip="Per interface network counters from atop sstat (intfstat, v2.12.x layout). Values are kernel counters (bytes, packets, errors, drops). The bandwidth chart shows per sample delta bytes divided by the sample interval in KB/s (1000 base to match most NIC datasheets); the packets chart shows packets per second. Source: photosyst.h.">Network I/O</h2>
+            <div class="chart-head-toggles">
+              <select id="net-interface" class="disk-device" aria-label="Network interface"></select>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-net"></canvas></div>
+          <div id="chart-net-placeholder" class="chart-placeholder" hidden></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head">
+            <h2 id="chart-net-pps-title" data-tip="Per interface packets per second from atop sstat (intfstat). Shows per sample delta packet counters divided by the sample interval. Rx is packets received, Tx is packets transmitted.">Network packets/s</h2>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-net-pps"></canvas></div>
+          <div id="chart-net-pps-placeholder" class="chart-placeholder" hidden></div>
+        </div>
+      </section>
+
+      <aside id="side">
+        <div class="panel">
+          <h2>Processes</h2>
+          <div class="proc-meta" id="proc-meta"></div>
+          <div class="proc-controls">
+            <span id="proc-time">no sample selected</span>
+          </div>
+          <div class="table-wrap">
+            <table id="proc-table">
+              <thead id="proc-thead">
+                <tr></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <aside id="chat-panel" class="chat-panel" hidden aria-label="AI chat">
+      <div id="chat-resize-handle" class="chat-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize chat panel" title="Drag to resize"></div>
+      <header class="chat-head">
+        <h2>AI chat</h2>
+        <div class="chat-head-meta">
+          <span id="chat-range-badge" class="chat-range-badge">Full range</span>
+          <button type="button" id="chat-reset" class="linkish" title="Clear conversation history">reset</button>
+          <button type="button" id="chat-close" class="linkish" title="Hide chat panel">close</button>
+        </div>
+      </header>
+      <div id="chat-log" class="chat-log" aria-live="polite">
+        <div class="chat-empty">Ask about CPU, memory, disk or network. Try "find problem points in the whole log" or pick a time range and ask "whats wrong in this slice?"</div>
+      </div>
+      <form id="chat-form" class="chat-form" autocomplete="off">
+        <textarea id="chat-input" rows="2" placeholder="Type a question..." required></textarea>
+        <div class="chat-form-row">
+          <span id="chat-status" class="muted small"></span>
+          <button type="submit" id="chat-send">Send</button>
+        </div>
+      </form>
+    </aside>
+
+    <div id="picker-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="picker-title">
+      <div class="modal-overlay" id="picker-overlay" tabindex="-1"></div>
+      <div class="modal-panel" role="document">
+        <header class="modal-head">
+          <h2 id="picker-title">Pick a rawlog</h2>
+          <button type="button" id="picker-close" class="linkish" aria-label="Close">close</button>
+        </header>
+
+        <div class="modal-tabs" role="tablist">
+          <button type="button" role="tab" id="tab-server" aria-controls="panel-server" class="tab active">Server logs</button>
+          <button type="button" role="tab" id="tab-upload" aria-controls="panel-upload" class="tab">Upload</button>
+        </div>
+
+        <section class="tab-panel" id="panel-server" role="tabpanel" aria-labelledby="tab-server">
+          <div class="browser-head">
+            <span id="server-browser-path" class="browser-path"></span>
+            <button type="button" id="server-refresh" class="linkish">refresh</button>
+          </div>
+          <div id="server-browser-body" class="browser-body">
+            <span class="muted">loading...</span>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="panel-upload" role="tabpanel" aria-labelledby="tab-upload" hidden>
+          <div id="drop-zone" class="drop-zone">
+            <p>Drop a rawlog file here, or</p>
+            <label class="file-label">
+              <input type="file" id="file-input" accept="*/*" />
+              <span id="file-input-label">Choose rawlog file</span>
+            </label>
+            <div class="muted small drop-zone-note">The file is streamed to the server and parsed in the background. The modal closes when the job starts.</div>
+            <button type="button" id="upload-submit">Upload and parse</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script src="static/app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,30 @@
+Vendored JavaScript libraries for the chat markdown rendering pipeline.
+These files are loaded by ``index.html`` over a same origin relative path so
+the app keeps working behind reverse proxies with a stripped sub path
+(e.g. Traefik stripprefix /atop) and without any runtime CDN call.
+
+Any bump must:
+  1. replace the file,
+  2. update the ``version``, ``url`` and ``sha256`` fields below,
+  3. re-run ``docker compose build`` to make sure the image ships the new
+     asset, and
+  4. re-run ``docker compose run --rm test pytest -q`` to keep the XSS
+     regression test green.
+
+--------------------------------------------------------------------------
+name:    marked
+version: 9.1.6
+url:     https://registry.npmjs.org/marked/-/marked-9.1.6.tgz  (package/marked.min.js)
+sha256:  6002af63485b043fa60ddaba1b34363b98d2a8b2c63b607004f3a2405a8a053a
+notes:   Last line of 9.x ships a UMD bundle that exports ``window.marked``.
+         10.x and later moved to ESM only, which would force us to rework
+         the loader. Sticking with 9.1.6 keeps the ``<script>`` tag model.
+
+--------------------------------------------------------------------------
+name:    DOMPurify
+version: 3.4.1
+url:     https://cdn.jsdelivr.net/npm/dompurify@3.4.1/dist/purify.min.js
+sha256:  c3d1c163c700071ad546390cb92a36c31cd6aceaad1bf77c4ef6eb9d845f1976
+notes:   UMD build; exposes ``window.DOMPurify``. We only use
+         ``DOMPurify.sanitize(html)`` with the default (very conservative)
+         allow list, so no ``config`` object is passed at call sites.

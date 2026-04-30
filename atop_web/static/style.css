@@ -1,0 +1,1581 @@
+/* Default (dark) palette. Also applied when [data-theme="dark"] is set. */
+:root,
+[data-theme="dark"] {
+  --bg: #0f1320;
+  --panel: #1a2033;
+  --panel2: #222a42;
+  --text: #e8ecf3;
+  --muted: #8a93a6;
+  --accent: #4da3ff;
+  --accent-hover: #6fb3ff;
+  --accent-soft: rgba(77, 163, 255, 0.16);
+  /* Text color for solid accent buttons. Kept as a variable so dark/light
+     themes pick their own high contrast fg without hardcoding ``color:
+     white`` in per component rules. Dark mode uses pure white for legibility
+     on the bright accent blue; older builds briefly set this to near-black
+     which left some buttons (apply, pick log) unreadable. */
+  --btn-fg: #ffffff;
+  /* Chat panel docking threshold. Below this viewport width the chat panel
+     floats as a right side drawer and overlays the page; at or above it the
+     body shifts left by ``--chat-panel-width`` so the charts, briefing and
+     chat never overlap. 1100px was picked because the main grid needs
+     roughly 680px to keep the 2 column chart layout readable and the chat
+     panel itself is 380px, leaving ~40px for the topbar + briefing side
+     margins. Above 1400px we still dock (same value, no extra query), so
+     only one breakpoint needs updating when the panel width changes. */
+  --chat-dock-min: 1100px;
+  --chat-panel-width: 380px;
+  --accent2: #8be9a8;
+  --warn: #ffb454;
+  --danger: #ff6b6b;
+  --border: #2b3350;
+  --chart-grid: #2b3350;
+  --chart-tick: #8a93a6;
+  /* System memory stack palette (used / cache / buff / slab / free) */
+  --mem-used: #ff8a65;
+  --mem-cache: #4da3ff;
+  --mem-buff: #9fbfff;
+  --mem-slab: #8a93a6;
+  --mem-free: #8be9a8;
+  --mem-avail: #4da3ff;
+  --mem-swap-used: #ff8a65;
+  --mem-swap-cached: #ffb454;
+  --mem-swap-free: #8be9a8;
+  /* System CPU stack palette (user / nice / system / irq / softirq /
+     steal / guest / iowait / idle). Order matches the stack ordering. */
+  --cpu-user: #4da3ff;
+  --cpu-nice: #8be9a8;
+  --cpu-sys: #ff8a65;
+  --cpu-irq: #ffb454;
+  --cpu-softirq: #e8b86b;
+  --cpu-steal: #b06bff;
+  --cpu-guest: #ff6bc5;
+  --cpu-wait: #6bd6e8;
+  --cpu-idle: #3a4466;
+  /* Disk read / write series */
+  --dsk-read: #4da3ff;
+  --dsk-write: #ff8a65;
+}
+
+/* Light palette is applied when an explicit data-theme="light" is set. */
+[data-theme="light"] {
+  --bg: #f5f6fa;
+  --panel: #ffffff;
+  --panel2: #eceff6;
+  --text: #1a1f2b;
+  --muted: #5b6577;
+  --accent: #1f6feb;
+  --accent-hover: #1b5fd1;
+  --accent-soft: rgba(31, 111, 235, 0.12);
+  --btn-fg: #ffffff;
+  --accent2: #1f9d55;
+  --warn: #b27300;
+  --danger: #d43f3f;
+  --border: #d0d5dd;
+  --chart-grid: #d0d5dd;
+  --chart-tick: #5b6577;
+  --mem-used: #d94f2b;
+  --mem-cache: #1f6feb;
+  --mem-buff: #6f9bff;
+  --mem-slab: #737b8a;
+  --mem-free: #1f9d55;
+  --mem-avail: #1f6feb;
+  --mem-swap-used: #d94f2b;
+  --mem-swap-cached: #b27300;
+  --mem-swap-free: #1f9d55;
+  --cpu-user: #1f6feb;
+  --cpu-nice: #1f9d55;
+  --cpu-sys: #d94f2b;
+  --cpu-irq: #b27300;
+  --cpu-softirq: #915a00;
+  --cpu-steal: #7a3fa6;
+  --cpu-guest: #b42978;
+  --cpu-wait: #1a7a8a;
+  --cpu-idle: #c7cdd6;
+  --dsk-read: #1f6feb;
+  --dsk-write: #d94f2b;
+}
+
+/* If the user has not picked a theme explicitly, honor the OS preference.
+   The JavaScript side also reads prefers-color-scheme on first load but the
+   media query keeps pure no-JS rendering reasonable as well. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #f5f6fa;
+    --panel: #ffffff;
+    --panel2: #eceff6;
+    --text: #1a1f2b;
+    --muted: #5b6577;
+    --accent: #1f6feb;
+    --accent-hover: #1b5fd1;
+    --accent-soft: rgba(31, 111, 235, 0.12);
+    --btn-fg: #ffffff;
+    --accent2: #1f9d55;
+    --warn: #b27300;
+    --danger: #d43f3f;
+    --border: #d0d5dd;
+    --chart-grid: #d0d5dd;
+    --chart-tick: #5b6577;
+    --mem-used: #d94f2b;
+    --mem-cache: #1f6feb;
+    --mem-buff: #6f9bff;
+    --mem-slab: #737b8a;
+    --mem-free: #1f9d55;
+    --mem-avail: #1f6feb;
+    --mem-swap-used: #d94f2b;
+    --mem-swap-cached: #b27300;
+    --mem-swap-free: #1f9d55;
+    --cpu-user: #1f6feb;
+    --cpu-nice: #1f9d55;
+    --cpu-sys: #d94f2b;
+    --cpu-irq: #b27300;
+    --cpu-softirq: #915a00;
+    --cpu-steal: #7a3fa6;
+    --cpu-guest: #b42978;
+    --cpu-wait: #1a7a8a;
+    --cpu-idle: #c7cdd6;
+    --dsk-read: #1f6feb;
+    --dsk-write: #d94f2b;
+  }
+}
+
+.disk-device {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 12px;
+  max-width: 180px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  font-size: 14px;
+}
+
+.topbar {
+  padding: 12px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px 20px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--accent);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  max-width: 260px;
+  overflow: hidden;
+}
+
+.file-label span {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.file-label input[type="file"] {
+  display: none;
+}
+
+button {
+  background: var(--accent);
+  color: var(--btn-fg);
+  border: 0;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--btn-fg);
+}
+
+button.linkish {
+  background: transparent;
+  color: var(--accent);
+  padding: 2px 6px;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+button.linkish:hover {
+  background: var(--accent-soft);
+}
+
+/* Pill toggles (chart unit selectors) */
+
+.pill-group {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-left: 8px;
+}
+
+.pill-group .pill {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.pill-group .pill:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.pill-group .pill.active {
+  background: var(--accent);
+  color: var(--btn-fg);
+}
+
+.tz-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#theme-toggle,
+.icon-toggle {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+#theme-toggle:hover,
+.icon-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.icon-toggle[hidden] {
+  display: none;
+}
+
+.icon-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tz-picker select {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+}
+
+.sysinfo {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.sysinfo strong {
+  color: var(--text);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 11px;
+}
+
+/* Modal ---------------------------------------------------------------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal[hidden] {
+  display: none;
+}
+
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-panel {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: min(720px, 94vw);
+  max-height: 90vh;
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.modal-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel2);
+}
+
+.modal-tabs .tab {
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 14px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+}
+
+.modal-tabs .tab:hover {
+  color: var(--text);
+}
+
+.modal-tabs .tab.active {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.tab-panel {
+  padding: 14px 16px;
+  overflow: auto;
+  flex: 1;
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+.browser-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.browser-path {
+  color: var(--muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.browser-body {
+  max-height: 50vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.browser-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.browser-table thead th {
+  background: var(--panel2);
+  position: sticky;
+  top: 0;
+  padding: 6px 10px;
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.browser-table tbody td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.browser-table tbody tr {
+  cursor: pointer;
+}
+
+.browser-table tbody tr:hover {
+  background: var(--accent-soft);
+}
+
+.browser-table tbody tr.selected {
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 6px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  text-align: center;
+  transition: border-color 150ms, background 150ms;
+}
+
+.drop-zone.hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.drop-zone p {
+  margin: 0;
+}
+
+.drop-zone-note {
+  max-width: 480px;
+}
+
+/* Progress + range ----------------------------------------------------- */
+
+.progress-bar-wrap {
+  padding: 8px 20px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.progress-track {
+  background: var(--panel2);
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  background: var(--accent);
+  height: 100%;
+  width: 0%;
+  transition: width 150ms linear;
+}
+
+.progress-fill.error {
+  background: var(--danger);
+}
+
+.progress-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.progress-detail {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.progress-detail[hidden] {
+  display: none;
+}
+
+.time-range {
+  padding: 8px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.time-range label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.range-input {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  width: 180px;
+}
+
+.range-input.invalid {
+  border-color: var(--danger);
+}
+
+.range-presets {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.range-error {
+  color: var(--danger);
+}
+
+#range-apply {
+  background: var(--accent);
+}
+
+.briefing {
+  padding: 10px 20px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.briefing[hidden] {
+  display: none;
+}
+
+.briefing-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.briefing-head h2 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.briefing-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.briefing-issue {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.briefing-issue.severity-warning {
+  border-left-color: var(--warn);
+}
+
+.briefing-issue.severity-critical {
+  border-left-color: var(--danger);
+}
+
+.briefing-issue .briefing-title {
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.briefing-issue .briefing-title .severity-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--btn-fg);
+  letter-spacing: 0.03em;
+}
+
+.briefing-issue.severity-warning .severity-badge {
+  background: var(--warn);
+}
+
+.briefing-issue.severity-critical .severity-badge {
+  background: var(--danger);
+  color: #fff;
+}
+
+.briefing-issue .briefing-detail {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.briefing-issue .briefing-hint {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.briefing-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.briefing-error {
+  color: var(--danger);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+main {
+  display: grid;
+  /* Two row layout: charts on top, processes table below. Rows size to
+     their content so the process panel can grow once populated. */
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+  gap: 12px;
+  padding: 12px;
+  min-height: calc(100vh - 90px);
+  min-height: calc(100dvh - 90px);
+}
+
+#charts {
+  overflow: visible;
+  display: grid;
+  /* Narrow default: single column stack. Wider modes below switch to
+     5 columns or a 3+2 layout based on the container's inline size, so
+     an open chat panel (which shrinks the effective main width) also
+     downgrades the layout without a viewport media query. */
+  grid-template-columns: 1fr;
+  grid-auto-rows: 320px;
+  gap: 12px;
+  align-content: start;
+  container-type: inline-size;
+}
+
+/* Mid (>=1100px container width): 6 column track with 3 cards spanning
+   2 columns each on row 1 and 2 cards spanning 3 columns each on row 2.
+   Yields the 3+2 layout without awkward orphans. */
+@container (min-width: 1100px) {
+  #charts {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-auto-rows: 300px;
+  }
+  #charts > .chart-card:nth-child(1),
+  #charts > .chart-card:nth-child(2),
+  #charts > .chart-card:nth-child(3) {
+    grid-column: span 2;
+  }
+  #charts > .chart-card:nth-child(4),
+  #charts > .chart-card:nth-child(5) {
+    grid-column: span 3;
+  }
+}
+
+/* Wide (>=1600px container width): all 5 charts on a single row. The
+   later rule wins over the mid mode because container queries cascade
+   in source order, so this block must follow the mid one. */
+@container (min-width: 1600px) {
+  #charts {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-auto-rows: 300px;
+  }
+  #charts > .chart-card:nth-child(1),
+  #charts > .chart-card:nth-child(2),
+  #charts > .chart-card:nth-child(3),
+  #charts > .chart-card:nth-child(4),
+  #charts > .chart-card:nth-child(5) {
+    grid-column: auto;
+  }
+}
+
+.chart-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.chart-head-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chart-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  padding: 24px 10px;
+  text-align: center;
+}
+
+.chart-placeholder[hidden] {
+  display: none;
+}
+
+.chart-card h2 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+h2[data-tip] {
+  cursor: help;
+}
+
+h2[data-tip]:hover,
+h2[data-tip]:focus {
+  color: var(--text);
+  outline: none;
+}
+
+/* Canvas must live inside a sized wrapper so Chart.js with
+   maintainAspectRatio:false does not enter a ResizeObserver loop with the
+   flex parent. The wrapper gives it a deterministic height; the canvas
+   fills 100% of that box without leaking size back to the grid. */
+.chart-canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.chart-card canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.proc-meta {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.proc-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.table-wrap {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+thead th {
+  background: var(--panel2);
+  position: sticky;
+  top: 0;
+  padding: 6px 8px;
+  text-align: left;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+thead th.sortable:hover {
+  color: var(--text);
+}
+
+thead th .sort-arrow {
+  margin-left: 4px;
+  color: var(--accent);
+  font-size: 10px;
+}
+
+thead th.num {
+  text-align: right;
+}
+
+thead th[data-tip] {
+  cursor: help;
+}
+
+thead th[data-tip] .th-label {
+  border-bottom: 2px dotted var(--muted);
+  padding-bottom: 1px;
+}
+
+thead th[data-tip]:hover .th-label,
+thead th[data-tip]:focus .th-label {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+thead th[data-tip]:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 200;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  max-width: 320px;
+  line-height: 1.4;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  white-space: normal;
+}
+
+.tooltip[hidden] {
+  display: none;
+}
+
+tbody td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+tbody tr:hover {
+  background: var(--accent-soft);
+}
+
+tbody td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+tbody td .raw-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.55;
+  margin-top: 1px;
+}
+
+/* ------------------------------------------------------------------------
+   Touch and tap tuning
+   ------------------------------------------------------------------------ */
+
+h2[data-tip],
+thead th[data-tip] {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ------------------------------------------------------------------------
+   Responsive layout
+   ------------------------------------------------------------------------ */
+
+/* Tablet: charts section is already a container-queried grid, so the
+   old viewport-based 2 column override is no longer needed. We only
+   keep the process table height floor and let ``main`` stay 1fr. */
+@media (max-width: 1024px) {
+  main {
+    height: auto;
+    min-height: 0;
+  }
+
+  #side {
+    min-height: 420px;
+  }
+}
+
+/* Phone: single column, touch friendly sizing, tables scroll horizontally. */
+@media (max-width: 640px) {
+  main {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  #charts {
+    grid-auto-rows: 260px;
+  }
+
+  .topbar {
+    padding: 10px 12px;
+    gap: 8px 10px;
+  }
+
+  .topbar h1 {
+    font-size: 16px;
+  }
+
+  .topbar-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .time-range {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    gap: 6px;
+  }
+
+  .time-range label {
+    width: 100%;
+  }
+
+  .range-input {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .range-presets {
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .chart-head {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .chart-card h2 {
+    font-size: 12px;
+  }
+
+  .pill-group {
+    margin-left: 0;
+  }
+
+  .pill-group .pill {
+    padding: 6px 12px;
+    font-size: 12px;
+    min-height: 32px;
+  }
+
+  button {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+
+  button.linkish {
+    min-height: 32px;
+    padding: 6px 10px;
+  }
+
+  .modal-panel {
+    width: 96vw;
+    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
+  .tab-panel {
+    padding: 12px;
+  }
+
+  .drop-zone {
+    padding: 18px 12px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #proc-table {
+    min-width: 640px;
+    font-size: 11px;
+  }
+
+  #proc-table tbody td,
+  #proc-table thead th {
+    padding: 5px 6px;
+  }
+
+  #proc-table tbody td .raw-hint {
+    font-size: 9px;
+  }
+
+  .browser-body {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .browser-table {
+    min-width: 520px;
+  }
+}
+
+/* Very small phones: trim the title and button paddings a bit more. */
+@media (max-width: 380px) {
+  .topbar h1 {
+    font-size: 14px;
+  }
+
+  .pill-group .pill {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  #proc-table {
+    min-width: 560px;
+    font-size: 10px;
+  }
+}
+
+/* Chat panel --------------------------------------------------------------
+   Three breakpoints (see the media queries below for the rationale):
+
+   * >=1400px  body margin-right shifts so the panel docks beside the main
+                grid and nothing overlaps the briefing card.
+   * 768..1399  default; panel is a floating drawer that overlays the
+                right edge with a shadow so the user knows it's above.
+   * <768      bottom sheet drawer, full width, with the toggle anchored
+                at the bottom right.
+*/
+
+.chat-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--chat-panel-width);
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.32);
+}
+
+.chat-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 25;
+  touch-action: none;
+}
+
+.chat-resize-handle:hover,
+.chat-resize-handle.dragging {
+  background: var(--accent-soft);
+}
+
+body.chat-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+@media (max-width: 767px) {
+  .chat-resize-handle {
+    display: none;
+  }
+}
+
+.chat-panel[hidden] {
+  display: none;
+}
+
+/* Default (768..1399px): the chat panel floats over the page as a right
+   side drawer; the underlying grid keeps its full width and is dimmed by
+   the drawer shadow. We only shrink the main grid at >=1400px where we
+   have enough horizontal space for both the charts and a docked panel
+   without the briefing card colliding with the bubbles. */
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+
+.chat-head h2 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chat-head-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-range-badge {
+  background: var(--border);
+  color: var(--text);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.chat-range-badge.active {
+  background: var(--accent);
+  color: var(--btn-fg);
+}
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  padding: 20px 4px;
+}
+
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 90%;
+}
+
+.chat-message.user {
+  align-self: flex-end;
+}
+
+.chat-message.assistant {
+  align-self: flex-start;
+}
+
+.chat-bubble {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.chat-message.user .chat-bubble {
+  background: var(--accent);
+  color: var(--btn-fg);
+}
+
+.chat-message.assistant .chat-bubble {
+  background: var(--border);
+  color: var(--text);
+  /* Markdown rendered bubbles need normal white-space so paragraph and list
+     margins collapse; the plain text streaming phase keeps pre-wrap via the
+     shared ``.chat-bubble`` rule above. */
+  white-space: normal;
+}
+
+.chat-message.assistant .chat-bubble p {
+  margin: 0 0 8px 0;
+}
+
+.chat-message.assistant .chat-bubble p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message.assistant .chat-bubble ul,
+.chat-message.assistant .chat-bubble ol {
+  margin: 4px 0 8px 18px;
+  padding: 0;
+}
+
+.chat-message.assistant .chat-bubble li {
+  margin: 2px 0;
+}
+
+.chat-message.assistant .chat-bubble strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.chat-message.assistant .chat-bubble em {
+  color: var(--muted);
+}
+
+.chat-message.assistant .chat-bubble code {
+  background: var(--panel2);
+  color: var(--accent);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.chat-message.assistant .chat-bubble pre {
+  background: var(--panel2);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 6px 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.chat-message.assistant .chat-bubble pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: 12px;
+}
+
+.chat-message.assistant .chat-bubble a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.chat-message.assistant .chat-bubble h1,
+.chat-message.assistant .chat-bubble h2,
+.chat-message.assistant .chat-bubble h3 {
+  margin: 6px 0 4px 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.chat-message.assistant .chat-bubble blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 6px 0;
+  padding: 2px 10px;
+  color: var(--muted);
+}
+
+.chat-message.error .chat-bubble {
+  background: #5a1f1f;
+  color: #ffd6d6;
+  font-style: italic;
+}
+
+.chat-hint-badge {
+  display: inline-block;
+  background: var(--accent);
+  color: var(--btn-fg);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 2px 2px;
+  border: none;
+}
+
+.chat-hint-badge:hover {
+  filter: brightness(1.15);
+}
+
+.chat-hint-badge-flash {
+  animation: chat-hint-flash 700ms ease-out;
+}
+
+@keyframes chat-hint-flash {
+  0%   { box-shadow: 0 0 0 0 var(--accent-soft), 0 0 0 2px var(--accent); }
+  100% { box-shadow: 0 0 0 10px transparent, 0 0 0 0 transparent; }
+}
+
+.chat-toast {
+  align-self: center;
+  max-width: 92%;
+  padding: 6px 10px;
+  background: var(--accent-soft);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  transition: opacity 400ms ease-out;
+}
+
+.chat-toast.fade-out {
+  opacity: 0;
+}
+
+.chat-form {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Placeholder assistant bubble rendered immediately after the user sends
+   a message. The same DOM node is later populated with the streamed
+   answer (see ``swapPlaceholderToAssistant``) so the scroll position
+   does not jump. The italic + muted color signals that this is not yet
+   the final reply. */
+.chat-bubble-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.chat-bubble-thinking .chat-spinner {
+  margin-right: 0;
+}
+
+/* Streaming text lives in its own child so token updates don't clobber
+   sibling ``.chat-hint-badge`` nodes. display: block lets the markdown
+   renderer's <p>/<ul>/<pre> layouts work naturally on finalize. */
+.chat-bubble-text {
+  display: block;
+}
+
+.chat-form textarea {
+  resize: vertical;
+  min-height: 44px;
+  max-height: 160px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.chat-form textarea:disabled {
+  opacity: 0.6;
+}
+
+.chat-form-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-form button {
+  background: var(--accent);
+  color: var(--btn-fg);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat-form button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.chat-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--muted);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: chat-spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+@keyframes chat-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Docked mode (>=768px): shift the whole body left by the panel width so
+   the topbar, briefing section, chart grid, and chat never overlap. The
+   resizable splitter (see ``.chat-resize-handle``) lets operators widen
+   the panel, so even narrower desktops stay usable without an overlay
+   drawer (overlapping the briefing / charts was the previous regression
+   this replaces). */
+@media (min-width: 768px) {
+  body[data-chat-open="1"] {
+    margin-right: var(--chat-panel-width);
+  }
+  body[data-chat-open="1"] .chat-panel {
+    box-shadow: none;
+  }
+}
+
+/* Phone (<768px): full width bottom drawer, toggle button anchored to the
+   bottom right of the viewport so it stays reachable with a thumb. */
+@media (max-width: 767px) {
+  .chat-panel {
+    width: 100%;
+    top: auto;
+    height: 70vh;
+    height: 70dvh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.32);
+  }
+  body[data-chat-open="1"] main {
+    margin-right: 0;
+    margin-bottom: 70vh;
+    margin-bottom: 70dvh;
+  }
+}

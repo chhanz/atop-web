@@ -1,0 +1,68 @@
+services:
+  atop-web:
+    build: .
+    container_name: atop-web
+    environment:
+      # Directory inside the container where atop rawlog files live. The
+      # server side file browser reads this path and also stamps it into
+      # /healthz. Leave empty to disable the browser.
+      ATOP_LOG_DIR: /var/log/atop
+      # External URL prefix when running behind a prefix stripping reverse
+      # proxy. Leave empty for root deployment.
+      ATOP_ROOT_PATH: /atop
+      # LLM provider: none (default) | bedrock | ollama | openai | anthropic | gemini
+      LLM_PROVIDER: ${LLM_PROVIDER:-none}
+      # Bedrock settings (used when LLM_PROVIDER=bedrock)
+      BEDROCK_MODEL: ${BEDROCK_MODEL:-global.anthropic.claude-sonnet-4-6}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      # AWS credentials: leave empty to use EC2 instance profile / IMDSv2.
+      # Set explicitly to use access key + secret (+ optional session token
+      # for STS temporary credentials / SSO / AssumeRole).
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    volumes:
+      # Bind mount the host directory that atop writes into. Swap the left
+      # hand side if your host stores rawlog files elsewhere, for example
+      # `- ./logs:/var/log/atop:ro`.
+      - /var/log/atop:/var/log/atop:ro
+      - ./atop_web:/app/atop_web
+    networks:
+      - traefik_net
+      - default
+    restart: unless-stopped
+    # 일주일치 데이터 분석 시 OOM으로 호스트 재부팅 방지용 안전망.
+    # 컨테이너가 한도 초과 시 atop-web만 종료되고 호스트는 보호됨.
+    # 근본 해결(스트리밍 파싱/다운샘플)은 Phase 20.3에서 처리.
+    mem_limit: 3g
+    memswap_limit: 3g
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_net"
+      - "traefik.http.routers.atop.rule=Host(`docs.chhanz.xyz`) && PathPrefix(`/atop`)"
+      - "traefik.http.routers.atop.entrypoints=web"
+      - "traefik.http.routers.atop.priority=200"
+      - "traefik.http.routers.atop.middlewares=atop-stripprefix,mkdocs-auth@file"
+      - "traefik.http.middlewares.atop-stripprefix.stripprefix.prefixes=/atop"
+      - "traefik.http.services.atop.loadbalancer.server.port=8000"
+    # Local debug without Traefik: uncomment the next two lines and set
+    # ATOP_ROOT_PATH to an empty string above if you want to hit the app
+    # directly at http://localhost:${HOST_PORT:-8000}/ .
+    # ports:
+    #   - "${HOST_PORT:-8000}:8000"
+
+  test:
+    build: .
+    environment:
+      ATOP_LOG_DIR: /var/log/atop
+    volumes:
+      - /var/log/atop:/var/log/atop:ro
+      - ./:/app
+    networks:
+      - default
+    command: pytest -v
+
+networks:
+  traefik_net:
+    external: true
+  default:

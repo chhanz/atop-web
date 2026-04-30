@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atop-web"
+version = "0.1.0"
+description = "Web based visualization and analysis for atop rawlog files"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "python-multipart>=0.0.9",
+    "dissect.cstruct>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+# Optional LLM providers. "bedrock" pulls boto3 for the AWS Bedrock
+# Converse API; the app runs fine without it when LLM_PROVIDER is unset
+# or set to "none".
+bedrock = [
+    "boto3>=1.34",
+]
+
+[tool.setuptools.packages.find]
+include = ["atop_web*"]
+
+[tool.setuptools.package-data]
+"atop_web.parser.layouts" = ["*.cdef"]
+"atop_web.static" = ["*.html", "*.js", "*.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
