@@ -40,6 +40,24 @@ assistant style analysis. Phase 1 is self contained and does not depend on it.
 The project runs only via Docker. Do not invoke `python`, `pip`, or `venv` on
 the host.
 
+### Run from the prebuilt image (recommended)
+
+A prebuilt image is published to GitHub Container Registry:
+
+```
+docker pull ghcr.io/chhanz/atop-web:latest
+
+docker run -d --name atop-web \
+  -p 8000:8000 \
+  -v /var/log/atop:/app/logs:ro \
+  ghcr.io/chhanz/atop-web:latest
+```
+
+Available tags: `latest`, `v0.1.0`. Image is ~200MB, runs on x86_64.
+
+Then open `http://localhost:8000`. Files under `/var/log/atop` on the host
+appear in the "Server log directory" panel.
+
 ### Build the image
 
 ```
