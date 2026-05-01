@@ -53,7 +53,7 @@ docker run -d --name atop-web \
   ghcr.io/chhanz/atop-web:latest
 ```
 
-Available tags: `latest`, `v0.1.0`. Image is ~200MB, runs on x86_64.
+Available tags: `latest`, `v0.2.0`, `v0.1.0`. Image is ~200MB, runs on x86_64.
 
 Then open `http://localhost:8000`. Files under `/var/log/atop` on the host
 appear in the "Server log directory" panel.
