@@ -18,7 +18,18 @@ def _candidate_dirs() -> list[Path]:
     dirs: list[Path] = []
     if env:
         dirs.append(Path(env))
-    dirs.extend([Path("/app/logs"), Path("/data"), Path("/var/log/atop")])
+    dirs.extend(
+        [
+            Path("/app/logs"),
+            Path("/data"),
+            Path("/var/log/atop"),
+            # Dev convenience: AL2 fixtures are typically placed under the
+            # operator's Downloads during evaluation. Adding the path lets
+            # the 2.7 tests run on the host without a symlink requiring
+            # root into /var/log/atop.
+            Path.home() / "Downloads",
+        ]
+    )
     return dirs
 
 
@@ -34,6 +45,24 @@ def rawlog_path() -> Path:
 @pytest.fixture(scope="session")
 def rawlog_bytes(rawlog_path: Path) -> bytes:
     return rawlog_path.read_bytes()
+
+
+@pytest.fixture(autouse=True)
+def _clear_response_cache():
+    """Drop the in-process response cache between every test.
+
+    The Phase 23 TTL cache is a module-level singleton keyed by
+    ``session_id``. Test session ids collide across tests when the
+    ``SessionStore`` is reused, so leaving cache entries around would
+    return a previous test's body on the next lookup. Clearing in
+    teardown (and once before the first test via the import) keeps
+    behaviour identical to a fresh process.
+    """
+    from atop_web.api.cache import get_response_cache
+
+    get_response_cache().clear()
+    yield
+    get_response_cache().clear()
 
 
 @pytest.fixture(scope="session")

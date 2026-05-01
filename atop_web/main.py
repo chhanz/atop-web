@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from atop_web.api.routes import (
+    dashboard,
     files,
     jobs,
     llm,
@@ -63,6 +64,7 @@ def create_app(root_path: str | None = None) -> FastAPI:
     app.include_router(samples.router, prefix="/api", tags=["samples"])
     app.include_router(processes.router, prefix="/api", tags=["processes"])
     app.include_router(summary.router, prefix="/api", tags=["summary"])
+    app.include_router(dashboard.router, prefix="/api", tags=["dashboard"])
     app.include_router(files.router, prefix="/api", tags=["files"])
     app.include_router(jobs.router, prefix="/api", tags=["jobs"])
     app.include_router(llm.router, prefix="/api", tags=["llm"])

@@ -210,12 +210,29 @@ full configuration.
 | GET    | `/api/files`        | List candidate rawlog files in `ATOP_LOG_DIR`       |
 | POST   | `/api/files/parse`  | Parse a server file by name, returns a session id   |
 | POST   | `/api/upload`       | Upload a rawlog file, returns a session id          |
+| GET    | `/api/dashboard`    | Summary + charts + processes in one fan-out payload |
 | GET    | `/api/samples`      | Time series for CPU, memory, disk, network          |
 | GET    | `/api/processes`    | Process (tstat) list for a specific sample time     |
 | GET    | `/api/summary`      | Hostname, kernel, sample count, time range, etc.    |
 
 The `/api/samples`, `/api/processes` and `/api/summary` endpoints accept a
 `session` query parameter returned by the two parse entry points.
+
+## Performance notes
+
+- Large rawlog files (hundreds of MB) are decoded lazily through an offset
+  index and an mmap over the file, so the parser keeps Python heap usage flat
+  regardless of the capture size. Set `ATOP_LAZY=0` to fall back to the
+  pre-Phase-22 eager decoder if the lazy path hits a regression.
+- The chart endpoints (`/api/samples/system_*`) downsample to one sample per
+  minute on windows longer than a minute. Sub-minute windows keep full
+  per-sample resolution for tooltip accuracy.
+- `/api/dashboard` is the fast path the frontend uses for first paint and
+  filter changes: one fetch serves the summary, all four charts and the
+  process table together. Responses are cached per session for
+  `ATOP_RESPONSE_CACHE_TTL` seconds (default 300s, cap 32 entries via
+  `ATOP_RESPONSE_CACHE_MAX`). The same-range refresh latency drops from
+  several seconds to milliseconds inside the TTL window.
 
 ## Compatibility
 

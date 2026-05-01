@@ -144,15 +144,20 @@ async def parse_file(
 
     target = _safe_resolve(base, request.name)
 
-    data = target.read_bytes()
-    if not data:
+    size_bytes = target.stat().st_size
+    if size_bytes == 0:
         raise HTTPException(status_code=400, detail="file is empty")
 
     filename = target.name
 
+    # Phase 22: pass the path straight through. ``owns_path=False`` —
+    # the file belongs to the operator's log directory, the pipeline
+    # must not unlink it.
     if sync:
         job = get_job_store().create(source="server", filename=filename)
-        run_parse_job(job.job_id, data, filename=filename, source="server")
+        run_parse_job(
+            job.job_id, target, filename=filename, source="server", owns_path=False
+        )
         final = get_job_store().get(job.job_id)
         if final is None or final.status != "done":
             raise HTTPException(
@@ -163,14 +168,16 @@ async def parse_file(
 
     job = get_job_store().create(source="server", filename=filename)
     get_job_store().update(job.job_id, stage=STAGE_UPLOAD_SAVED)
-    schedule_parse_job(job.job_id, data, filename=filename, source="server")
+    schedule_parse_job(
+        job.job_id, target, filename=filename, source="server", owns_path=False
+    )
 
     return JSONResponse(
         {
             "job_id": job.job_id,
             "source": "server",
             "filename": filename,
-            "size_bytes": len(data),
+            "size_bytes": size_bytes,
         },
         status_code=status.HTTP_202_ACCEPTED,
     )

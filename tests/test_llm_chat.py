@@ -8,7 +8,7 @@ import pytest
 
 from atop_web.llm import chat, context
 from atop_web.llm.provider import LLMProvider, LLMProviderError
-from atop_web.parser.reader import parse_file
+from atop_web.parser.reader import RawLog, parse_file
 
 
 @pytest.fixture(scope="module")
@@ -33,7 +33,13 @@ def test_build_all_context_has_spike_candidates(rawlog):
 
 
 def test_build_all_context_empty_samples(rawlog):
-    empty = type(rawlog)(header=rawlog.header, samples=[], spec=rawlog.spec)
+    # Build an eager ``RawLog`` shell regardless of what the rawlog
+    # fixture returns — the Phase 22 default is a ``LazyRawLog`` whose
+    # ``samples`` is a self-reference, so we cannot construct an empty
+    # version of it without a real file. Dropping in an eager shell is
+    # fine here; ``build_all_context`` only touches header / samples
+    # which are duck-type compatible.
+    empty = RawLog(header=rawlog.header, samples=[], spec=getattr(rawlog, "spec", None))
     ctx = context.build_all_context(empty)
     assert ctx["mode"] == "all"
     assert ctx["capture"]["sample_count"] == 0

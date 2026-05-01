@@ -368,7 +368,6 @@
     state.capture.intervalSeconds = tr.interval_seconds ?? null;
     state.capture.minRangeSeconds = tr.recommended_min_range_seconds || 300;
     setupTimeRange(summary);
-    await loadSamples();
     // Reset per session chat state so history does not leak across captures.
     state.chatHistory = [];
     const chatLog = el("chat-log");
@@ -377,9 +376,19 @@
     }
     refreshChatVisibility();
     updateChatRangeBadge();
-    // Fire and forget: the briefing card updates itself when the response
-    // arrives. A slow or failing LLM must not block the rest of the UI.
+    // Phase 24 fix: request the briefing *before* loading the samples.
+    // A slow or failing /api/dashboard must not block the briefing
+    // trigger, and the briefing itself runs on a background LLM call
+    // so it does not block the rest of this handler either.
     requestBriefing(state.currentJobId);
+    try {
+      await loadSamples();
+    } catch (err) {
+      // Chart render is a best-effort step; an error here must not
+      // stop the user from seeing the summary card or the AI briefing
+      // that already kicked off above.
+      console.error("loadSamples failed", err);
+    }
   }
 
   // AI briefing ------------------------------------------------------------
@@ -2251,25 +2260,30 @@
 
   async function loadSamples() {
     if (!state.session) return;
+    // Phase 23 T-23: five parallel fetches collapse into one
+    // /api/dashboard call. The server now fans out internally and
+    // serves repeat requests from a process-local TTL cache, so both
+    // first paint and re-render on filter changes are markedly faster.
     const query = `session=${encodeURIComponent(state.session)}${buildRangeQuery()}`;
-    const [samplesRes, sysmemRes, syscpuRes, sysdskRes, sysnetRes] = await Promise.all([
-      fetch(`api/samples?${query}`),
-      fetch(`api/samples/system_memory?${query}`),
-      fetch(`api/samples/system_cpu?${query}`),
-      fetch(`api/samples/system_disk?${query}`),
-      fetch(`api/samples/system_network?${query}`),
-    ]);
-    if (!samplesRes.ok) throw new Error(`samples request failed: ${samplesRes.status}`);
-    const data = await samplesRes.json();
+    const res = await fetch(`api/dashboard?${query}`);
+    if (!res.ok) throw new Error(`dashboard request failed: ${res.status}`);
+    const body = await res.json();
+    const data = body.samples;
     state.samples = data;
-    state.sysmem = sysmemRes.ok ? await sysmemRes.json() : null;
-    state.syscpu = syscpuRes.ok ? await syscpuRes.json() : null;
-    state.sysdsk = sysdskRes.ok ? await sysdskRes.json() : null;
-    state.sysnet = sysnetRes.ok ? await sysnetRes.json() : null;
+    state.sysmem = body.charts ? body.charts.memory : null;
+    state.syscpu = body.charts ? body.charts.cpu : null;
+    state.sysdsk = body.charts ? body.charts.disk : null;
+    state.sysnet = body.charts ? body.charts.network : null;
     ensureDiskDevice();
     ensureNetInterface();
     renderCharts(data);
-    if (data.count > 0) {
+    if (data.count > 0 && body.processes && body.processes.count > 0) {
+      // The dashboard endpoint already computed the last sample's
+      // process table; render it directly without a follow-up fetch.
+      state.currentIndex = data.count - 1;
+      renderProcesses(body.processes);
+      renderProcThead();
+    } else if (data.count > 0) {
       loadProcesses(data.count - 1);
     } else {
       const tbody = el("proc-table").querySelector("tbody");

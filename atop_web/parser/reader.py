@@ -29,14 +29,27 @@ Per process tstat statistics are decoded in full by the CDEF layout.
 from __future__ import annotations
 
 import io
+import os
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import TYPE_CHECKING, Iterator, Optional
 
 from dissect.cstruct import cstruct
 
 from atop_web.parser.decompress import DecompressError, inflate
+
+if TYPE_CHECKING:
+    from atop_web.parser.index import SampleIndex
+
+
+def _lazy_default() -> bool:
+    """Return the default ``lazy=`` value for parse entry points.
+
+    Reads ``ATOP_LAZY`` fresh on every call so tests (and operators)
+    can flip the gate at runtime without reloading the module.
+    """
+    return os.environ.get("ATOP_LAZY", "1") != "0"
 
 MAGIC = 0xFEEDBEEF
 
@@ -497,6 +510,30 @@ class RawLog:
     header: Header
     samples: list[Sample]
     spec: VersionSpec | None = None
+    # Phase 22: populated when ``parse_stream(..., lazy=True)`` is used.
+    # Eager mode leaves it ``None`` so existing callers see no change.
+    index: "SampleIndex | None" = None
+
+
+@dataclass(slots=True)
+class SampleOffset:
+    """Byte layout of a single sample inside a rawlog file.
+
+    Produced by ``scan_sample_offsets`` in one forward pass over the
+    rawrecord headers. Carries the fields a lazy decoder needs to seek
+    to, and bound the read of, any one sample without re-walking the
+    entire file. ``sstatlen`` / ``tstatlen`` mirror the fixed per-version
+    struct sizes so downstream code does not need to thread the spec
+    alongside the offsets.
+    """
+
+    offset: int
+    scomplen: int
+    pcomplen: int
+    curtime: int
+    ndeviat: int
+    sstatlen: int
+    tstatlen: int
 
 
 # ---------------------------------------------------------------------------
@@ -1058,11 +1095,27 @@ def _parse_header(stream: io.BufferedReader) -> tuple[Header, VersionSpec]:
     return _build_header(raw, spec), spec
 
 
-def _scan_sample_offsets(
-    stream: io.BufferedReader, max_samples: int | None, spec: VersionSpec
-) -> list[tuple[int, int]]:
-    """First pass: walk record headers without decoding payloads."""
-    offsets: list[tuple[int, int]] = []
+def scan_sample_offsets(
+    stream: io.BufferedReader,
+    max_samples: int | None,
+    spec: VersionSpec,
+) -> list[SampleOffset]:
+    """Walk rawrecord headers, record offsets, skip past payloads.
+
+    This is the public entry point used by both the eager decode path and
+    the Phase 22 lazy index builder. It reads only the fixed-size record
+    header of each sample (no zlib inflate), which keeps the first pass
+    bounded by ``n_samples * rawrecord_size`` bytes regardless of the
+    total rawlog size.
+
+    The stream must be positioned immediately after the rawheader — use
+    ``_parse_header`` first. On return, the stream is positioned at the
+    first byte past the last sample it read (or EOF when ``max_samples``
+    is None and the file runs out).
+    """
+    offsets: list[SampleOffset] = []
+    sstatlen = spec.sstat_size
+    tstatlen = spec.tstat_size
     while True:
         if max_samples is not None and len(offsets) >= max_samples:
             break
@@ -1079,11 +1132,90 @@ def _scan_sample_offsets(
         if spec.record_has_cgroup_fields:
             skip += rec.ccomplen + rec.icomplen
         stream.seek(skip, io.SEEK_CUR)
-        offsets.append((pos, rec.pcomplen))
+        offsets.append(
+            SampleOffset(
+                offset=pos,
+                scomplen=rec.scomplen,
+                pcomplen=rec.pcomplen,
+                curtime=rec.curtime,
+                ndeviat=rec.ndeviat,
+                sstatlen=sstatlen,
+                tstatlen=tstatlen,
+            )
+        )
     return offsets
 
 
+def _scan_sample_offsets(
+    stream: io.BufferedReader, max_samples: int | None, spec: VersionSpec
+) -> list[SampleOffset]:
+    """Backwards-compatible shim for the pre-Phase-22 private spelling.
+
+    Kept so in-flight callers keep working while T-02/T-03 migrate to the
+    public name. Removed in T-11 once nothing imports this.
+    """
+    return scan_sample_offsets(stream, max_samples, spec)
+
+
 ProgressCallback = "typing.Callable[[str, int, int | None, int | None], None]"
+
+
+@dataclass(slots=True)
+class _DecodedSystemBundle:
+    """What one inflated sstat blob yields after decoding.
+
+    The lazy view caches this per sample so a single ``__getattr__`` for
+    ``system_cpu`` also primes ``system_memory`` / ``system_disk`` /
+    ``system_network`` from the same inflate — sstat inflate is the
+    dominant per-sample cost and we only want to pay it once.
+    """
+
+    nrcpu: int | None
+    system_memory: SystemMemory | None
+    system_cpu: SystemCpu | None
+    system_disk: SystemDisk | None
+    system_network: SystemNetwork | None
+
+
+def _decode_sstat_bundle(
+    sstat_bytes: bytes,
+    spec: VersionSpec,
+    pagesize: int,
+    sstatlen: int,
+    hertz: int,
+) -> _DecodedSystemBundle:
+    """Decode all four system_* sub-dataclasses from one inflated sstat blob."""
+    nrcpu: int | None = None
+    if len(sstat_bytes) >= 8:
+        candidate = int.from_bytes(sstat_bytes[:8], byteorder="little", signed=True)
+        if 1 <= candidate <= 8192:
+            nrcpu = candidate
+    return _DecodedSystemBundle(
+        nrcpu=nrcpu,
+        system_memory=_decode_system_memory(sstat_bytes, pagesize, sstatlen, spec),
+        system_cpu=_decode_system_cpu(sstat_bytes, hertz, sstatlen, spec),
+        system_disk=_decode_system_disk(sstat_bytes, sstatlen, spec),
+        system_network=_decode_system_network(sstat_bytes, sstatlen, spec),
+    )
+
+
+def _decode_processes(
+    pdata: bytes,
+    spec: VersionSpec,
+    ndeviat: int,
+) -> list[Process]:
+    tstatlen = spec.tstat_size
+    expected = tstatlen * ndeviat
+    if len(pdata) != expected:
+        raise RawLogError(
+            f"tstat payload size mismatch: got {len(pdata)} bytes, expected {expected}"
+        )
+    processes: list[Process] = []
+    for j in range(ndeviat):
+        chunk = pdata[j * tstatlen : (j + 1) * tstatlen]
+        t = spec.cs.tstat(chunk)
+        processes.append(_build_process(t))
+    return processes
 
 
 def _decode_samples(
@@ -1092,7 +1224,7 @@ def _decode_samples(
     pagesize: int,
     sstatlen: int,
     hertz: int,
-    offsets: list[tuple[int, int]],
+    offsets: list[SampleOffset],
     progress_cb,
 ) -> list[Sample]:
     samples: list[Sample] = []
@@ -1105,10 +1237,8 @@ def _decode_samples(
         fraction = max(0.0, min(1.0, fraction))
         return int(PROGRESS_LO + SPAN * fraction)
 
-    tstatlen = spec.tstat_size
-
-    for i, (offset, _pcomp) in enumerate(offsets):
-        stream.seek(offset, io.SEEK_SET)
+    for i, so in enumerate(offsets):
+        stream.seek(so.offset, io.SEEK_SET)
         head = stream.read(spec.rawrecord_size)
         if len(head) != spec.rawrecord_size:
             raise RawLogError(
@@ -1122,16 +1252,7 @@ def _decode_samples(
         except DecompressError as exc:
             raise RawLogError(f"sstat inflate failed at sample {i}: {exc}") from exc
 
-        nrcpu: int | None = None
-        if len(sstat_bytes) >= 8:
-            candidate = int.from_bytes(sstat_bytes[:8], byteorder="little", signed=True)
-            if 1 <= candidate <= 8192:
-                nrcpu = candidate
-
-        system_memory = _decode_system_memory(sstat_bytes, pagesize, sstatlen, spec)
-        system_cpu = _decode_system_cpu(sstat_bytes, hertz, sstatlen, spec)
-        system_disk = _decode_system_disk(sstat_bytes, sstatlen, spec)
-        system_network = _decode_system_network(sstat_bytes, sstatlen, spec)
+        bundle = _decode_sstat_bundle(sstat_bytes, spec, pagesize, sstatlen, hertz)
 
         if progress_cb is not None and total > 0:
             progress_cb(
@@ -1150,16 +1271,7 @@ def _decode_samples(
                 raise RawLogError(
                     f"tstat inflate failed at sample {i}: {exc}"
                 ) from exc
-            expected = tstatlen * rec.ndeviat
-            if len(pdata) != expected:
-                raise RawLogError(
-                    f"tstat payload size mismatch at sample {i}: "
-                    f"got {len(pdata)} bytes, expected {expected}"
-                )
-            for j in range(rec.ndeviat):
-                chunk = pdata[j * tstatlen : (j + 1) * tstatlen]
-                t = spec.cs.tstat(chunk)
-                processes.append(_build_process(t))
+            processes = _decode_processes(pdata, spec, rec.ndeviat)
 
         if progress_cb is not None and total > 0:
             progress_cb(
@@ -1181,11 +1293,11 @@ def _decode_samples(
                 totslpi=rec.totslpi,
                 totslpu=rec.totslpu,
                 totzomb=rec.totzomb,
-                nrcpu=nrcpu,
-                system_memory=system_memory,
-                system_cpu=system_cpu,
-                system_disk=system_disk,
-                system_network=system_network,
+                nrcpu=bundle.nrcpu,
+                system_memory=bundle.system_memory,
+                system_cpu=bundle.system_cpu,
+                system_disk=bundle.system_disk,
+                system_network=bundle.system_network,
                 processes=processes,
             )
         )
@@ -1197,16 +1309,39 @@ def parse_stream(
     *,
     max_samples: int | None = None,
     progress_cb=None,
+    lazy: bool | None = None,
 ) -> RawLog:
-    """Parse a rawlog from an already open binary stream."""
+    """Parse a rawlog from an already open binary stream.
+
+    ``lazy`` controls which decode path runs. When left as ``None`` the
+    value comes from ``ATOP_LAZY`` (default ``"1"``/lazy). Flipping the
+    env to ``"0"`` restores the pre-Phase-22 eager decode as a rollback
+    escape hatch.
+
+    Lazy mode returns a ``RawLog`` shell carrying only the header, the
+    version spec and a ``SampleIndex``. The ``samples`` list is empty in
+    that shell; callers that want per-sample access wrap the result
+    with ``LazyRawLog``. The higher-level entry points
+    (``parse_file`` / ``parse_bytes``) handle that wrapping for you.
+    """
+    if lazy is None:
+        lazy = _lazy_default()
     if progress_cb is not None:
         progress_cb("header", 0, None, 10)
 
     header, spec = _parse_header(stream)
-    offsets = _scan_sample_offsets(stream, max_samples, spec)
+    offsets = scan_sample_offsets(stream, max_samples, spec)
 
     if progress_cb is not None:
         progress_cb("scanning", len(offsets), len(offsets), 15)
+
+    if lazy:
+        from atop_web.parser.index import build_sample_index
+
+        index = build_sample_index(offsets, spec)
+        if progress_cb is not None:
+            progress_cb("index_built", len(index), len(index), 85)
+        return RawLog(header=header, samples=[], spec=spec, index=index)
 
     samples = _decode_samples(
         stream,
@@ -1225,16 +1360,68 @@ def parse_stream(
 
 
 def parse_bytes(
-    data: bytes, *, max_samples: int | None = None, progress_cb=None
-) -> RawLog:
+    data: bytes,
+    *,
+    max_samples: int | None = None,
+    progress_cb=None,
+    lazy: bool | None = None,
+):
+    """Parse a rawlog given its bytes; lazy-aware by default.
+
+    When the effective ``lazy`` is truthy we spool the bytes to a temp
+    file and open a ``LazyRawLog`` against it — the caller then gets a
+    proper file-backed lazy rawlog rather than a shell with no handle.
+    """
+    if lazy is None:
+        lazy = _lazy_default()
+    if lazy:
+        import tempfile
+
+        from atop_web.parser.lazy import LazyRawLog
+
+        tmpdir = os.environ.get("TMPDIR") or tempfile.gettempdir()
+        tf = tempfile.NamedTemporaryFile(
+            mode="w+b", dir=tmpdir, prefix="atop_parse_", delete=False
+        )
+        try:
+            tf.write(data)
+            tf.flush()
+        finally:
+            tf.close()
+        return LazyRawLog.open(Path(tf.name))
     return parse_stream(
-        io.BytesIO(data), max_samples=max_samples, progress_cb=progress_cb
+        io.BytesIO(data),
+        max_samples=max_samples,
+        progress_cb=progress_cb,
+        lazy=False,
     )
 
 
 def parse_file(
-    path: str | Path, *, max_samples: int | None = None, progress_cb=None
-) -> RawLog:
+    path: str | Path,
+    *,
+    max_samples: int | None = None,
+    progress_cb=None,
+    lazy: bool | None = None,
+):
+    """Parse a rawlog given its path; lazy-aware by default.
+
+    Lazy mode returns a ``LazyRawLog`` that keeps the file handle
+    open for the life of the session. Eager mode still decodes the
+    full capture into ``list[Sample]`` and returns the legacy
+    ``RawLog`` dataclass — kept for tests and the ``ATOP_LAZY=0``
+    rollback path.
+    """
     path = Path(path)
+    if lazy is None:
+        lazy = _lazy_default()
+    if lazy and max_samples is None:
+        from atop_web.parser.lazy import LazyRawLog
+
+        return LazyRawLog.open(path)
+    # Eager: ``max_samples`` still needs the full decode loop to honor
+    # the cap, so the stream path is what we want here.
     with path.open("rb") as fh:
-        return parse_stream(fh, max_samples=max_samples, progress_cb=progress_cb)
+        return parse_stream(
+            fh, max_samples=max_samples, progress_cb=progress_cb, lazy=False
+        )

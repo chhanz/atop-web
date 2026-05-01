@@ -3,7 +3,13 @@ FROM python:3.13-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    ATOP_LOG_DIR=/app/logs
+    ATOP_LOG_DIR=/app/logs \
+    # Phase 22 upload spool target. /tmp is tmpfs-backed in many Docker
+    # setups, which would fight with mem_limit for the rolled-over
+    # payload. Pin the spool to the writable layer instead so the
+    # rawlog bytes sit on disk, not in RAM.
+    TMPDIR=/var/tmp
+
 
 WORKDIR /app
 

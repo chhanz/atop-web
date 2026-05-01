@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
+from atop_web.api.cache import get_response_cache
 from atop_web.api.sessions import get_store
-from atop_web.api.timerange import filter_samples, parse_iso_epoch
-from atop_web.parser.reader import Process, Sample
+from atop_web.api.timerange import parse_iso_epoch
+from atop_web.parser.reader import Process
 
 router = APIRouter()
 
@@ -115,34 +116,69 @@ def processes(
         )
 
     sess = get_store().require(session)
-    rawlog = sess.rawlog
-    if not rawlog.samples:
+    if sess.sample_count() == 0:
         raise HTTPException(status_code=404, detail="no samples in session")
 
     from_epoch = parse_iso_epoch(from_, field="from")
     to_epoch = parse_iso_epoch(to, field="to")
-    subset = filter_samples(rawlog.samples, from_epoch, to_epoch)
+
+    cache = get_response_cache()
+    cache_key = (
+        session,
+        "processes",
+        from_epoch,
+        to_epoch,
+        time,
+        index,
+        limit,
+        sort_by,
+        order,
+    )
+
+    def _build_processes():
+        return _processes_impl(
+            sess, session, from_epoch, to_epoch, time, index, limit, sort_by, order
+        )
+
+    try:
+        return cache.get_or_compute(cache_key, _build_processes)
+    except HTTPException:
+        raise
+
+
+def _processes_impl(
+    sess,
+    session: str,
+    from_epoch: int | None,
+    to_epoch: int | None,
+    time: int | None,
+    index: int | None,
+    limit: int,
+    sort_by: str,
+    order: str,
+) -> dict:
+    subset = sess.samples_in_range(from_epoch, to_epoch)
     if not subset:
         raise HTTPException(status_code=404, detail="no samples in range")
 
     if index is not None:
         if index >= len(subset):
             raise HTTPException(status_code=404, detail="index out of range")
-        sample: Sample = subset[index]
+        sample = subset[index]
     elif time is not None:
         sample = min(subset, key=lambda s: abs(s.curtime - time))
     else:
         sample = subset[-1]
 
-    hertz = rawlog.header.hertz
+    hertz = sess.rawlog.header.hertz
     interval_sec = sample.interval
     ncpu = sample.nrcpu
 
-    key = _sort_key(sort_by)
+    sort_callable = _sort_key(sort_by)
     reverse = order == "desc"
     # ``sorted`` is stable; the key appends pid as the secondary component
     # so ties resolve consistently regardless of the input order.
-    procs = sorted(sample.processes, key=key, reverse=reverse)[:limit]
+    procs = sorted(sample.processes, key=sort_callable, reverse=reverse)[:limit]
 
     return {
         "session": session,

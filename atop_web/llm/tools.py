@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable
 
+from atop_web.parser.lazy import LazyRawLog
 from atop_web.parser.reader import RawLog, Sample
 
 
@@ -141,7 +142,24 @@ def _parse_iso_or_epoch(value: Any) -> int | None:
     return None
 
 
-def _subset(samples: list[Sample], start: int | None, end: int | None) -> list[Sample]:
+def _subset(samples, start: int | None, end: int | None):
+    """Return the subset of ``samples`` within the inclusive window.
+
+    ``samples`` is either a plain ``list[Sample]`` (eager path) or a
+    ``LazyRawLog`` (Phase 22 lazy path). In the lazy case we use the
+    offset-index bisect to avoid touching rawrecord headers for samples
+    that fall outside the window; in the eager case we keep the simple
+    linear filter so the result type stays ``list[Sample]`` for callers
+    that rely on list semantics.
+    """
+    if isinstance(samples, LazyRawLog):
+        if start is None and end is None:
+            return list(samples)
+        idx = samples.index
+        lo = start if start is not None else -(1 << 62)
+        hi = end if end is not None else (1 << 62)
+        lo_i, hi_i = idx.slice_by_time(lo, hi)
+        return [samples[i] for i in range(lo_i, hi_i)]
     if start is None and end is None:
         return samples
     lo = start if start is not None else -(1 << 62)
@@ -618,12 +636,18 @@ def build_tool_specs(rawlog: RawLog) -> list[ToolSpec]:
     def get_capture_info(args: dict) -> dict:
         # Median timestamp delta is a better estimator of the effective
         # sampling rate than ``Sample.interval`` which can be 0 on the
-        # first frame of a capture.
-        if len(samples_all) >= 2:
+        # first frame of a capture. On the lazy path we avoid decoding
+        # every sample just to read curtime by pulling timestamps out
+        # of the index directly when it's available.
+        if isinstance(samples_all, LazyRawLog):
+            ts_list = list(samples_all.index.timestamps)
+        else:
+            ts_list = [s.curtime for s in samples_all]
+        if len(ts_list) >= 2:
             deltas = [
-                b.curtime - a.curtime
-                for a, b in zip(samples_all, samples_all[1:])
-                if b.curtime - a.curtime > 0
+                ts_list[i] - ts_list[i - 1]
+                for i in range(1, len(ts_list))
+                if ts_list[i] - ts_list[i - 1] > 0
             ]
             deltas.sort()
             interval = deltas[len(deltas) // 2] if deltas else None

@@ -5,10 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from atop_web.api.sessions import get_store
-from atop_web.llm.context import (
-    _median_interval_seconds,
-    _recommended_min_range,
-)
+from atop_web.llm.context import _recommended_min_range
 
 router = APIRouter()
 
@@ -16,33 +13,31 @@ router = APIRouter()
 @router.get("/summary")
 def summary(session: str = Query(...)) -> dict:
     sess = get_store().require(session)
-    rawlog = sess.rawlog
-    header = rawlog.header
+    header = sess.rawlog.header
 
-    if rawlog.samples:
-        start = rawlog.samples[0].curtime
-        end = rawlog.samples[-1].curtime
-        total_ndeviat = sum(s.ndeviat for s in rawlog.samples)
-        avg_ndeviat = total_ndeviat / len(rawlog.samples)
-        max_ndeviat = max(s.ndeviat for s in rawlog.samples)
+    sample_count = sess.sample_count()
+    if sample_count:
+        start = sess.first_time() or 0
+        end = sess.last_time() or 0
+        avg_ndeviat, max_ndeviat = sess.ndeviat_stats()
     else:
         start = 0
         end = 0
         avg_ndeviat = 0.0
         max_ndeviat = 0
 
-    interval_seconds = _median_interval_seconds(rawlog.samples)
+    interval_seconds = sess.median_interval_seconds()
     recommended_min_range = _recommended_min_range(interval_seconds)
 
     return {
         "session": session,
         "filename": sess.filename,
         "size_bytes": sess.size_bytes,
-        "sample_count": len(rawlog.samples),
+        "sample_count": sample_count,
         "time_range": {
             "start": start,
             "end": end,
-            "duration_seconds": end - start if rawlog.samples else 0,
+            "duration_seconds": end - start if sample_count else 0,
             # Exposed so the chat client can enforce a minimum range width
             # when the user clicks a ``<range/>`` hint badge. Without this
             # a 10 minute tag on a capture with 600s sample intervals
