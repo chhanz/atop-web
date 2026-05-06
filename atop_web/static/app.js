@@ -1000,12 +1000,12 @@
         }
       );
       if (!res.ok) {
-        let detail;
+        const raw = await res.text();
+        let detail = raw;
         try {
-          detail = (await res.json()).detail;
-        } catch {
-          detail = await res.text();
-        }
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.detail) detail = parsed.detail;
+        } catch { /* raw text fallback */ }
         gotError = `HTTP ${res.status}: ${detail}`;
       } else if (!res.body) {
         gotError = "server returned no streaming body";
@@ -1920,7 +1920,7 @@
       const everyMissing = avail.length > 0 && avail.every((v) => v === null || v === undefined);
       if (everyMissing) {
         setMemPlaceholder(
-          "available 값은 atop 2.7 로그에서는 지원되지 않습니다 (데이터 없음)."
+          "MemAvailable is not recorded in atop 2.7 rawlogs (no data)."
         );
         return;
       }
