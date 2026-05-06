@@ -348,15 +348,35 @@ def test_parse_progress_cb_emits_enough_updates(rawlog_path):
 # Multi version dispatch (Phase 16) -------------------------------------------
 
 
-def test_version_table_covers_both_revisions():
-    from atop_web.parser.reader import SPEC_2_12, SPEC_2_7, VERSION_TABLE
+def test_version_table_covers_all_revisions():
+    from atop_web.parser.reader import (
+        SPEC_2_7,
+        SPEC_2_10,
+        SPEC_2_11,
+        SPEC_2_12,
+        VERSION_TABLE,
+    )
 
-    assert VERSION_TABLE[(968, 1_064_016)] is SPEC_2_12
-    assert VERSION_TABLE[(840, 954_360)] is SPEC_2_7
-    # 2.12 struct sizes are exposed through the module as well for legacy
+    # The lookup key is (tstatlen, sstatlen, aversion) where
+    # aversion = ((major & 0x7f) << 8) | (minor & 0xff). 0x820C = 2.12,
+    # 0x820B = 2.11, 0x820A = 2.10, 0x8207 = 2.7.
+    assert VERSION_TABLE[(968, 1_064_016, 0x820C)] is SPEC_2_12
+    assert VERSION_TABLE[(968, 1_064_016, 0x820B)] is SPEC_2_11
+    assert VERSION_TABLE[(992, 1_030_216, 0x820A)] is SPEC_2_10
+    assert VERSION_TABLE[(840, 954_360, 0x8207)] is SPEC_2_7
+    # Fallback entries with aversion=None cover unknown minor bumps that
+    # still share a known struct layout.
+    assert VERSION_TABLE[(968, 1_064_016, None)] is SPEC_2_12
+    assert VERSION_TABLE[(992, 1_030_216, None)] is SPEC_2_10
+    assert VERSION_TABLE[(840, 954_360, None)] is SPEC_2_7
+    # Struct sizes are exposed through the module as well for legacy
     # tests that import them directly.
     assert SPEC_2_12.tstat_size == 968
     assert SPEC_2_12.sstat_size == 1_064_016
+    assert SPEC_2_11.tstat_size == 968
+    assert SPEC_2_11.sstat_size == 1_064_016
+    assert SPEC_2_10.tstat_size == 992
+    assert SPEC_2_10.sstat_size == 1_030_216
     assert SPEC_2_7.tstat_size == 840
     assert SPEC_2_7.sstat_size == 954_360
 
@@ -491,3 +511,173 @@ def test_decoders_return_none_on_2_7_sstatlen_with_mismatched_buffer():
     assert _decode_system_cpu(short, 100, 954_360) is None
     assert _decode_system_disk(short, 954_360) is None
     assert _decode_system_network(short, 954_360) is None
+
+
+# atop 2.11 dispatch (Stage A) -----------------------------------------------
+
+
+def test_spec_2_11_shares_2_12_layout():
+    # atop 2.11 rawlogs (RHEL 10.1, SLES 15-SP7, SLES 16.0) are bit-for-bit
+    # identical to 2.12 at the struct level. We keep SPEC_2_11 as a
+    # distinct instance so diagnostics report "atop_2_11" for RHEL 10
+    # captures, but it MUST reuse the 2.12 CDEF and carry the same struct
+    # sizes — otherwise the dispatch alias would silently decode wrong.
+    from atop_web.parser.reader import SPEC_2_11, SPEC_2_12
+
+    assert SPEC_2_11.name == "atop_2_11"
+    assert SPEC_2_11.cdef_filename == SPEC_2_12.cdef_filename
+    assert SPEC_2_11.tstat_size == SPEC_2_12.tstat_size
+    assert SPEC_2_11.sstat_size == SPEC_2_12.sstat_size
+    assert SPEC_2_11.memstat_offset == SPEC_2_12.memstat_offset
+    assert SPEC_2_11.dskstat_offset == SPEC_2_12.dskstat_offset
+    assert SPEC_2_11.intfstat_offset == SPEC_2_12.intfstat_offset
+    assert SPEC_2_11.record_has_cgroup_fields is True
+
+
+def test_select_spec_prefers_aversion_over_fallback():
+    # When aversion distinguishes two specs with identical struct sizes,
+    # _select_spec must return the matching-aversion spec, not whatever
+    # the fallback key points at.
+    from atop_web.parser.reader import SPEC_2_11, SPEC_2_12, _select_spec
+
+    assert _select_spec(968, 1_064_016, 0x820C) is SPEC_2_12
+    assert _select_spec(968, 1_064_016, 0x820B) is SPEC_2_11
+    # Unknown aversion with a known struct layout falls through to the
+    # ``aversion=None`` entry (2.12 in this case).
+    assert _select_spec(968, 1_064_016, 0x820D) is SPEC_2_12
+    # Legacy call without aversion still works via the fallback.
+    assert _select_spec(968, 1_064_016) is SPEC_2_12
+    assert _select_spec(840, 954_360) is not None
+
+
+def test_parse_2_11_rawlog_reports_atop_2_11_spec(rawlog_211_path):
+    # The capture is from RHEL 10.1 with atop 2.11.1. Dispatch must pick
+    # SPEC_2_11 so ``RawLog.spec.name`` tells the operator the true atop
+    # revision, not the layout-alias destination.
+    from atop_web.parser.reader import parse_file
+
+    rawlog = parse_file(rawlog_211_path, max_samples=1)
+    h = rawlog.header
+    assert h.aversion == "2.11"
+    assert h.tstatlen == 968
+    assert h.sstatlen == 1_064_016
+    assert rawlog.spec is not None
+    assert rawlog.spec.name == "atop_2_11"
+
+
+def test_parse_2_11_rawlog_decodes_core_fields(rawlog_211_path):
+    # Because 2.11 aliases 2.12 structurally, every substructure must
+    # decode the same way: cpustat reports a positive nrcpu, memstat
+    # surfaces availablemem (2.11+ ships MemAvailable), dskstat/intfstat
+    # produce non-negative counters.
+    from atop_web.parser.reader import parse_file
+
+    rawlog = parse_file(rawlog_211_path, max_samples=2)
+    assert len(rawlog.samples) >= 1
+    s = rawlog.samples[0]
+    assert s.curtime > 0
+    assert s.ndeviat > 0
+    assert len(s.processes) == s.ndeviat
+
+    assert s.system_cpu is not None
+    assert s.system_cpu.nrcpu >= 1
+    assert s.system_cpu.lavg1 >= 0.0
+
+    assert s.system_memory is not None
+    assert s.system_memory.physmem > 0
+    # 2.11 ships availablemem (unlike 2.7).
+    assert s.system_memory.availablemem is not None
+    assert s.system_memory.availablemem >= 0
+
+    assert s.system_network is not None
+    assert s.system_network.nrintf >= 1
+    for iface in s.system_network.interfaces:
+        assert iface.rbyte >= 0 and iface.sbyte >= 0
+
+
+# atop 2.10 dispatch (Stage B) -----------------------------------------------
+
+
+def test_spec_2_10_registered():
+    # Stage B registers atop 2.10 as a first-class spec with distinct
+    # struct sizes (tstat=992, sstat=1_030_216) and a pre-cgroup
+    # rawrecord (no ccomplen / coriglen / ncgpids / icomplen).
+    from atop_web.parser.reader import KNOWN_SPECS, SPEC_2_10, VERSION_TABLE
+
+    assert SPEC_2_10 in KNOWN_SPECS
+    assert SPEC_2_10.name == "atop_2_10"
+    assert SPEC_2_10.cdef_filename == "atop_2_10.cdef"
+    assert SPEC_2_10.tstat_size == 992
+    assert SPEC_2_10.sstat_size == 1_030_216
+    # 2.10 predates the cgroup-accounting rawrecord tail introduced in
+    # atop 2.11.
+    assert SPEC_2_10.record_has_cgroup_fields is False
+    # 2.10 ships MemAvailable (index 43, same as 2.11/2.12) and inflight
+    # (2.10 perdsk carries the field).
+    assert SPEC_2_10.memstat_availablemem_idx == 43
+    assert SPEC_2_10.perdsk_has_inflight is True
+    # Dispatch keys.
+    assert VERSION_TABLE[(992, 1_030_216, 0x820A)] is SPEC_2_10
+
+
+def test_parse_2_10_rawlog_reports_atop_2_10_spec(rawlog_210_path):
+    # Ubuntu 24.04 ships atop 2.10.0. Dispatch must pick SPEC_2_10 and
+    # surface the true atop major.minor so operator-facing diagnostics
+    # don't mislabel the capture.
+    from atop_web.parser.reader import parse_file
+
+    rawlog = parse_file(rawlog_210_path, max_samples=1)
+    h = rawlog.header
+    assert h.aversion == "2.10"
+    assert h.tstatlen == 992
+    assert h.sstatlen == 1_030_216
+    assert h.rawheadlen == 480
+    assert h.rawreclen == 96
+    assert rawlog.spec is not None
+    assert rawlog.spec.name == "atop_2_10"
+
+
+def test_parse_2_10_rawlog_decodes_core_fields(rawlog_210_path):
+    # End-to-end decode sanity: the offsets measured against the u24
+    # fixture must land on plausible counters across every substruct.
+    from atop_web.parser.reader import parse_file
+
+    rawlog = parse_file(rawlog_210_path, max_samples=2)
+    assert len(rawlog.samples) >= 1
+    s = rawlog.samples[0]
+    assert s.curtime > 0
+    assert s.ndeviat > 0
+    assert len(s.processes) == s.ndeviat
+    for p in s.processes:
+        assert p.pid >= 0
+        assert p.utime >= 0
+        assert p.stime >= 0
+
+    assert s.system_cpu is not None
+    assert s.system_cpu.nrcpu >= 1
+    assert s.system_cpu.lavg1 >= 0.0
+    assert s.system_cpu.all.utime >= 0
+
+    assert s.system_memory is not None
+    assert s.system_memory.physmem > 0
+    assert s.system_memory.freemem >= 0
+    # 2.10 ships MemAvailable (kernel feature predates 2.10).
+    assert s.system_memory.availablemem is not None
+    assert s.system_memory.availablemem >= 0
+
+    assert s.system_disk is not None
+    for dev in s.system_disk.disks + s.system_disk.mdds + s.system_disk.lvms:
+        assert dev.nread >= 0
+        assert dev.nwrite >= 0
+        # 2.10 perdsk has inflight; the decoder must surface an integer,
+        # not None (None means "field absent", e.g. 2.7 rawlogs).
+        assert dev.inflight is not None
+        assert dev.inflight >= 0
+
+    assert s.system_network is not None
+    assert s.system_network.nrintf >= 1
+    names = [i.name for i in s.system_network.interfaces]
+    assert "lo" in names
+    for iface in s.system_network.interfaces:
+        assert iface.rbyte >= 0 and iface.sbyte >= 0
+        assert iface.rpack >= 0 and iface.spack >= 0

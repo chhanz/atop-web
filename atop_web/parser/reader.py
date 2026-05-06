@@ -8,14 +8,22 @@ and iterates over samples in a rawlog file. The parser reads:
   compressed ``sstat`` blob, ``ndeviat`` zlib compressed ``tstat``
   structures, and (on atop >= 2.12) optional cgroup payloads
 
-Two atop rawlog revisions are supported:
+Four atop rawlog revisions are supported:
 
-* atop 2.12.x (AL2023 default, native build)
-* atop 2.7.x  (AL2 EPEL default)
+* atop 2.12.x (AL2023 / Ubuntu 26.04, native build)
+* atop 2.11.x (RHEL 10 / SLES 15-SP7 / SLES 16.0; shares the 2.12 layout)
+* atop 2.10.x (Ubuntu 24.04; distinct struct sizes, pre-cgroup rawrecord)
+* atop 2.7.x  (AL2 EPEL, RHEL 8 / RHEL 9 default)
 
 The right CDEF is chosen by reading ``tstatlen`` and ``sstatlen`` from the
 ``rawheader`` and looking them up in ``VERSION_TABLE``. Unknown combinations
 raise ``RawLogError`` rather than silently skipping fields.
+
+atop 2.11 and 2.12 emit rawlogs with identical ``(tstatlen, sstatlen)`` and
+use the same on-disk field layout, so they share a single CDEF. The dispatch
+step consults ``aversion`` from the rawheader to preserve the true atop
+major.minor on ``RawLog.spec.name`` / error logs (users on RHEL 10 should
+see ``atop_2_11`` in diagnostics, not ``atop_2_12``).
 
 System level statistics (sstat) depend on a large number of per host sized
 arrays declared in photosyst.h (MAXCPU, MAXDSK, etc.) that differ between
@@ -200,6 +208,121 @@ SPEC_2_12 = VersionSpec(
 )
 
 
+# atop 2.11.x (RHEL 10.1, SLES 15-SP7, SLES 16.0). The on-disk rawlog layout
+# (tstatlen, sstatlen, memstat/dskstat/intfstat offsets) is identical to
+# atop 2.12 — verified against ``atop_20260506_rl10`` (RHEL 10.1, atop
+# 2.11.1) and the SLES captures. Reusing ``atop_2_12.cdef`` is therefore
+# correct; we keep a separate VersionSpec instance so that diagnostics
+# (``RawLog.spec.name``, unsupported-version error messages) report the
+# true atop major.minor emitted by the capturing host. If a future 2.11.x
+# revision diverges from 2.12, this is the seam where the divergence is
+# expressed without touching 2.12 callers.
+SPEC_2_11 = VersionSpec(
+    name="atop_2_11",
+    cdef_filename="atop_2_12.cdef",  # shared layout
+    tstat_size=968,
+    sstat_size=1_064_016,
+    record_has_cgroup_fields=True,
+    memstat_offset=344_312,
+    memstat_physmem_idx=0,
+    memstat_freemem_idx=1,
+    memstat_buffermem_idx=2,
+    memstat_slabmem_idx=3,
+    memstat_cachemem_idx=4,
+    memstat_totswap_idx=6,
+    memstat_freeswap_idx=7,
+    memstat_swapcached_idx=26,
+    memstat_availablemem_idx=43,
+    memstat_min_tail_fields=44,
+    cpustat_max_cpu=2048,
+    percpu_size=168,
+    percpu_all_offset=80,
+    percpu_array_offset=248,
+    dskstat_offset=601_688,
+    perdsk_size=128,
+    perdsk_has_inflight=True,
+    perdsk_name_size=32,
+    dsk_array_offset=16,
+    mdd_array_offset=16 + 128 * 1024,
+    lvm_array_offset=16 + 128 * 1024 + 128 * 256,
+    max_dsk=1024,
+    max_mdd=256,
+    max_lvm=2048,
+    intfstat_offset=345_664,
+    perintf_size=272,
+    perintf_name_size=16,
+    perintf_array_offset=8,
+    perintf_max=128,
+)
+
+
+# atop 2.10.x (Ubuntu 24.04 default). Offsets measured against
+# ``atop_20260506_u24`` (Ubuntu 24.04, atop 2.10.0): memstat starts
+# directly after cpustat (2.10 cpustat size is identical to 2.12 at
+# 344_312 B); intfstat located by scanning for the "lo" interface name
+# (345_656 = intfstat header; perintf array starts 8 B later at 345_664);
+# dskstat located by scanning for "nvme0n1" (568_928 = dsk[0].name, so
+# dskstat header sits at 568_912).
+#
+# The rawrecord is 96 B but lacks the cgroup-accounting fields (ccomplen
+# / coriglen / ncgpids / icomplen) that atop 2.11+ added — per sample
+# skip is ``scomplen + pcomplen`` only.
+#
+# memstat (2.10) field indices (see photosyst.h struct memstat):
+#   0 physmem, 1 freemem, 2 buffermem, 3 slabmem, 4 cachemem, 5 cachedrt,
+#   6 totswap, 7 freeswap, 8..14 pgscans..udpsock, 15..16 commitlim/committed,
+#   17..19 shmem/shmrss/shmswp, 20 slabreclaim, 21..23 stothugepage/
+#   sfreehugepage/shugepagesz, 24 vmwballoon, 25 zfsarcsize, 26 swapcached,
+#   27 ksmsharing, 28 ksmshared, 29 zswapped, 30 zswap, 31 oomkills,
+#   32 compactstall, 33 pgmigrate, 34 numamigrate, 35 pgouts, 36 pgins,
+#   37 pagetables, 38 zswouts, 39 zswins, 40..42 ltothugepage/
+#   lfreehugepage/lhugepagesz, 43 availablemem, 44 anonhugepage,
+#   45..48 cfuture[0..3] -> 49 count_t = 392 B.
+# The swapcached index (26) matches 2.12, availablemem (43) matches 2.12.
+# anonhugepage (44) is new vs 2.12; the decoder does not read it, so no
+# change is required to the memstat_min_tail_fields contract beyond the
+# larger tail (49 vs 44).
+SPEC_2_10 = VersionSpec(
+    name="atop_2_10",
+    cdef_filename="atop_2_10.cdef",
+    tstat_size=992,
+    sstat_size=1_030_216,
+    # 2.10 predates the cgroup-accounting rawrecord tail (ccomplen /
+    # coriglen / ncgpids / icomplen) introduced in atop 2.11.
+    record_has_cgroup_fields=False,
+    memstat_offset=344_312,
+    memstat_physmem_idx=0,
+    memstat_freemem_idx=1,
+    memstat_buffermem_idx=2,
+    memstat_slabmem_idx=3,
+    memstat_cachemem_idx=4,
+    memstat_totswap_idx=6,
+    memstat_freeswap_idx=7,
+    memstat_swapcached_idx=26,
+    memstat_availablemem_idx=43,
+    memstat_min_tail_fields=49,
+    cpustat_max_cpu=2048,
+    percpu_size=168,
+    percpu_all_offset=80,
+    percpu_array_offset=248,
+    dskstat_offset=568_912,
+    perdsk_size=128,
+    perdsk_has_inflight=True,
+    perdsk_name_size=32,
+    dsk_array_offset=16,
+    mdd_array_offset=16 + 128 * 1024,
+    lvm_array_offset=16 + 128 * 1024 + 128 * 256,
+    max_dsk=1024,
+    max_mdd=256,
+    max_lvm=2048,
+    intfstat_offset=345_656,
+    perintf_size=272,
+    perintf_name_size=16,
+    perintf_array_offset=8,
+    perintf_max=128,
+)
+
+
 # atop 2.7.x (AL2 EPEL, gcc 7.3.1 / glibc 2.26). Offsets measured from
 # struct definitions in /tmp/atop-al2-src/atop-2.7.1/photosyst.h with AL2
 # alignment. See the Phase 16 design notes for the derivation.
@@ -281,22 +404,51 @@ SPEC_2_7 = VersionSpec(
 )
 
 
-# Map (tstatlen, sstatlen) -> VersionSpec. These two fields in the rawheader
-# together uniquely identify the atop rawlog revision for the versions we
-# support. Keep the table small: fallbacks / fuzzy matching risk silently
-# decoding a future revision as an older one.
-VERSION_TABLE: dict[tuple[int, int], VersionSpec] = {
-    (SPEC_2_12.tstat_size, SPEC_2_12.sstat_size): SPEC_2_12,
-    (SPEC_2_7.tstat_size, SPEC_2_7.sstat_size): SPEC_2_7,
+# Map (tstatlen, sstatlen, aversion_major_minor) -> VersionSpec. The atop
+# rawheader encodes the capture-time atop version in ``aversion`` as
+# ((major & 0x7f) << 8) | (minor & 0xff); e.g. 0x820b = 2.11, 0x820c = 2.12.
+# We include that in the lookup key so 2.11 and 2.12 captures — which share
+# identical ``(tstatlen, sstatlen)`` — map to distinct VersionSpecs and
+# diagnostics report the true major.minor.
+#
+# The fallback entry with ``aversion=None`` covers unknown minor bumps that
+# still share a known struct layout: if a future atop 2.13 keeps the 2.12
+# layout, the ``(tstat, sstat, None)`` fallback catches it. The first exact
+# match by ``(tstat, sstat, aversion)`` wins; otherwise we fall back to the
+# ``(tstat, sstat, None)`` entry. Keep the table small: fuzzy matching risks
+# silently decoding a diverging future revision as an older one.
+VERSION_TABLE: dict[tuple[int, int, int | None], VersionSpec] = {
+    (SPEC_2_12.tstat_size, SPEC_2_12.sstat_size, 0x820C): SPEC_2_12,
+    (SPEC_2_11.tstat_size, SPEC_2_11.sstat_size, 0x820B): SPEC_2_11,
+    # Fallback: unknown aversion with the 2.12-compatible struct sizes.
+    # Assume 2.12 layout; if a future revision diverges, this entry needs
+    # to go and every supported minor gets an explicit key.
+    (SPEC_2_12.tstat_size, SPEC_2_12.sstat_size, None): SPEC_2_12,
+    (SPEC_2_10.tstat_size, SPEC_2_10.sstat_size, 0x820A): SPEC_2_10,
+    (SPEC_2_10.tstat_size, SPEC_2_10.sstat_size, None): SPEC_2_10,
+    (SPEC_2_7.tstat_size, SPEC_2_7.sstat_size, 0x8207): SPEC_2_7,
+    (SPEC_2_7.tstat_size, SPEC_2_7.sstat_size, None): SPEC_2_7,
 }
 
 
-def _select_spec(tstatlen: int, sstatlen: int) -> VersionSpec:
-    spec = VERSION_TABLE.get((tstatlen, sstatlen))
+# Module-level ordered list of known specs for diagnostics / iteration.
+# Kept separate from VERSION_TABLE so duplicates (2.11 and 2.12 aliasing
+# through the shared layout) are listed once.
+KNOWN_SPECS: tuple[VersionSpec, ...] = (SPEC_2_12, SPEC_2_11, SPEC_2_10, SPEC_2_7)
+
+
+def _select_spec(
+    tstatlen: int, sstatlen: int, aversion: int | None = None
+) -> VersionSpec:
+    spec = VERSION_TABLE.get((tstatlen, sstatlen, aversion))
+    if spec is None:
+        # Fall back to the ``aversion=None`` entry for the same struct sizes
+        # so an unexpected minor bump that keeps the layout still decodes.
+        spec = VERSION_TABLE.get((tstatlen, sstatlen, None))
     if spec is None:
         supported = ", ".join(
             f"{s.name} (tstat={s.tstat_size}, sstat={s.sstat_size})"
-            for s in (SPEC_2_12, SPEC_2_7)
+            for s in KNOWN_SPECS
         )
         raise RawLogError(
             f"unsupported atop version: tstat={tstatlen}, sstat={sstatlen}. "
@@ -1016,15 +1168,24 @@ def _spec_for_sstatlen(sstatlen: int) -> VersionSpec | None:
     """Look up a spec by sstat length alone.
 
     Used by the test oriented decoder entry points that are called without
-    a spec argument. The ``(tstatlen, sstatlen)`` tuple is the normal key;
-    here we only have sstatlen, so we scan the version table and take the
-    unique match. If two revisions ever share the same sstat size we will
-    need to pass the spec explicitly.
+    a spec argument. The ``(tstatlen, sstatlen, aversion)`` tuple is the
+    normal key; here we only have sstatlen, so we scan ``KNOWN_SPECS`` and
+    take the unique match by decoder-relevant layout. Two specs that share
+    an identical sstat layout (e.g. atop 2.11 and 2.12) are treated as a
+    single layout for this lookup — picking either one yields identical
+    decoder output. If two revisions ever genuinely diverge at the same
+    sstat size, callers must pass the spec explicitly.
     """
-    matches = [s for s in VERSION_TABLE.values() if s.sstat_size == sstatlen]
-    if len(matches) == 1:
-        return matches[0]
-    return None
+    matches = [s for s in KNOWN_SPECS if s.sstat_size == sstatlen]
+    if not matches:
+        return None
+    # Deduplicate specs that share a CDEF and all decoder-relevant offsets
+    # (2.11 aliases 2.12). Pick the first one as a stable representative.
+    first = matches[0]
+    for s in matches[1:]:
+        if s.cdef_filename != first.cdef_filename:
+            return None  # genuinely different layouts at same sstat size
+    return first
 
 
 # ---------------------------------------------------------------------------
@@ -1055,24 +1216,27 @@ def _read_exact(stream: io.BufferedReader, size: int, what: str) -> bytes:
 _PROBE_HEADER_SIZE = 36
 
 
-def _probe_header(stream: io.BufferedReader) -> tuple[int, int, int, int]:
-    """Peek the first 36 bytes and return (magic, rawheadlen, tstatlen, sstatlen)."""
+def _probe_header(
+    stream: io.BufferedReader,
+) -> tuple[int, int, int, int, int]:
+    """Peek the first 36 bytes and return (magic, aversion, rawheadlen, tstatlen, sstatlen)."""
     stream.seek(0)
     buf = _read_exact(stream, _PROBE_HEADER_SIZE, "rawheader probe")
     magic = struct.unpack_from("<I", buf, 0)[0]
+    aversion = struct.unpack_from("<H", buf, 4)[0]
     rawheadlen = struct.unpack_from("<H", buf, 10)[0]
     sstatlen = struct.unpack_from("<I", buf, 28)[0]
     tstatlen = struct.unpack_from("<I", buf, 32)[0]
-    return magic, rawheadlen, tstatlen, sstatlen
+    return magic, aversion, rawheadlen, tstatlen, sstatlen
 
 
 def _parse_header(stream: io.BufferedReader) -> tuple[Header, VersionSpec]:
-    magic, rawheadlen, tstatlen, sstatlen = _probe_header(stream)
+    magic, aversion, rawheadlen, tstatlen, sstatlen = _probe_header(stream)
     if magic != MAGIC:
         raise RawLogError(
             f"invalid rawlog magic: expected 0x{MAGIC:08X}, got 0x{magic:08X}"
         )
-    spec = _select_spec(tstatlen, sstatlen)
+    spec = _select_spec(tstatlen, sstatlen, aversion)
 
     if rawheadlen != spec.rawheader_size:
         raise RawLogError(

@@ -242,6 +242,9 @@ for a different rawlog revision is a matter of adding a new CDEF file. The
 parser is an independent implementation and makes no claim of compatibility
 with other third party tooling.
 
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the full atop version
+and OS compatibility matrix.
+
 ## License
 
 Apache License 2.0.

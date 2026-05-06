@@ -1,0 +1,222 @@
+/*
+ * atop rawlog binary layout for atop 2.10.x rawlog revision.
+ *
+ * Ubuntu 24.04 ships atop 2.10.0 by default. The 2.10 on disk layout sits
+ * between 2.7 and 2.12 on a few axes:
+ *   - rawheader is the same 480 byte layout as 2.12 (has pidwidth and the
+ *     cstatlen / ifuture tail), but with sfuture[5] instead of the 2.12 tail.
+ *   - rawrecord is 96 bytes and carries cgroup-oblivious fields: flags,
+ *     sfuture[3], the standard counters (scomplen..totidle), then
+ *     ifuture[5] + pad. There are no ccomplen / coriglen / ncgpids /
+ *     icomplen fields — those arrived in 2.11+.
+ *   - struct tstat is 992 bytes: gen gains a cgroup v2 path (cgpath[64])
+ *     but gen drops the 2.12 cgroupix/ifuture[4] tail. cpu/mem gain a few
+ *     named cgroup limit counters replacing reserved futures, so the
+ *     per-substruct sizes stay identical to 2.12.
+ *
+ * Struct sizes measured against ``/var/log/atop/atop_20260506_u24`` on
+ * Ubuntu 24.04 (atop 2.10.0):
+ *   rawheader  = 480 bytes
+ *   rawrecord  =  96 bytes
+ *   tstat      = 992 bytes
+ *     gen      = 456 (includes cgpath[64]; struct-aligned to 8)
+ *     cpu      = 136
+ *     dsk      =  72
+ *     mem      = 160
+ *     net      = 112
+ *     gpu      =  56
+ *   sstat      = 1_030_216 bytes (measured on inflated first sample)
+ *
+ * Sources: /tmp/atop-2.10-src/atop-2.10.0/rawlog.h, photoproc.h, photosyst.h
+ * (upstream GitHub v2.10.0 tag).
+ */
+
+typedef int64  count_t;
+typedef int64  time_t;
+
+#define UTSNAME_LENGTH 65
+
+struct utsname {
+    char    sysname[UTSNAME_LENGTH];
+    char    nodename[UTSNAME_LENGTH];
+    char    release[UTSNAME_LENGTH];
+    char    version[UTSNAME_LENGTH];
+    char    machine[UTSNAME_LENGTH];
+    char    domainname[UTSNAME_LENGTH];
+};
+
+struct rawheader {
+    uint32  magic;
+
+    uint16  aversion;
+    uint16  future1;
+    uint16  future2;
+    uint16  rawheadlen;
+    uint16  rawreclen;
+    uint16  hertz;
+    uint16  pidwidth;
+    uint16  sfuture[5];
+    uint32  sstatlen;
+    uint32  tstatlen;
+    struct utsname utsname;
+    char    cfuture[8];
+    char    _pad0[2];
+
+    uint32  pagesize;
+    int32   supportflags;
+    int32   osrel;
+    int32   osvers;
+    int32   ossub;
+    int32   ifuture[6];
+};
+
+struct rawrecord {
+    time_t  curtime;
+
+    uint16  flags;
+    uint16  sfuture[3];
+
+    uint32  scomplen;
+    uint32  pcomplen;
+    uint32  interval;
+    uint32  ndeviat;
+    uint32  nactproc;
+    uint32  ntask;
+    uint32  totproc;
+    uint32  totrun;
+    uint32  totslpi;
+    uint32  totslpu;
+    uint32  totzomb;
+    uint32  nexit;
+    uint32  noverflow;
+    uint32  totidle;
+    uint32  ifuture[5];
+    char    _pad0[4];
+};
+
+#define PNAMLEN 15
+#define CMDLEN  255
+#define UTSLEN  15
+#define CGRLEN  64
+
+struct tstat_gen {
+    int32   tgid;
+    int32   pid;
+    int32   ppid;
+    int32   ruid;
+    int32   euid;
+    int32   suid;
+    int32   fsuid;
+    int32   rgid;
+    int32   egid;
+    int32   sgid;
+    int32   fsgid;
+    int32   nthr;
+    char    name[16];
+    char    isproc;
+    char    state;
+    char    _pad0[2];
+    int32   excode;
+    time_t  btime;
+    time_t  elaps;
+    char    cmdline[256];
+    int32   nthrslpi;
+    int32   nthrslpu;
+    int32   nthrrun;
+    int32   nthridle;
+    int32   ctid;
+    int32   vpid;
+    int32   wasinactive;
+    char    utsname[16];
+    char    cgpath[64];
+    char    _pad1[4];
+};
+
+struct tstat_cpu {
+    count_t utime;
+    count_t stime;
+    int32   nice;
+    int32   prio;
+    int32   rtprio;
+    int32   policy;
+    int32   curcpu;
+    int32   sleepavg;
+    int32   cgcpuweight;
+    int32   cgcpumax;
+    int32   cgcpumaxr;
+    int32   ifuture[3];
+    char    wchan[16];
+    count_t rundelay;
+    count_t blkdelay;
+    count_t nvcsw;
+    count_t nivcsw;
+    count_t cfuture[3];
+};
+
+struct tstat_dsk {
+    count_t rio;
+    count_t rsz;
+    count_t wio;
+    count_t wsz;
+    count_t cwsz;
+    count_t cfuture[4];
+};
+
+struct tstat_mem {
+    count_t minflt;
+    count_t majflt;
+    count_t vexec;
+    count_t vmem;
+    count_t rmem;
+    count_t pmem;
+    count_t vgrow;
+    count_t rgrow;
+    count_t vdata;
+    count_t vstack;
+    count_t vlibs;
+    count_t vswap;
+    count_t vlock;
+    count_t cgmemmax;
+    count_t cgmemmaxr;
+    count_t cgswpmax;
+    count_t cgswpmaxr;
+    count_t cfuture[3];
+};
+
+struct tstat_net {
+    count_t tcpsnd;
+    count_t tcpssz;
+    count_t tcprcv;
+    count_t tcprsz;
+    count_t udpsnd;
+    count_t udpssz;
+    count_t udprcv;
+    count_t udprsz;
+    count_t avail1;
+    count_t avail2;
+    count_t cfuture[4];
+};
+
+struct tstat_gpu {
+    char    state;
+    char    cfuture[3];
+    int16   nrgpus;
+    char    _pad0[2];
+    int32   gpulist;
+    int32   gpubusy;
+    int32   membusy;
+    char    _pad1[4];
+    count_t timems;
+    count_t memnow;
+    count_t memcum;
+    count_t sample;
+};
+
+struct tstat {
+    struct tstat_gen gen;
+    struct tstat_cpu cpu;
+    struct tstat_dsk dsk;
+    struct tstat_mem mem;
+    struct tstat_net net;
+    struct tstat_gpu gpu;
+};
