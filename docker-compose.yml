@@ -15,12 +15,17 @@ services:
       # Bedrock settings (used when LLM_PROVIDER=bedrock)
       BEDROCK_MODEL: ${BEDROCK_MODEL:-global.anthropic.claude-sonnet-4-6}
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
-      # AWS credentials: leave empty to use EC2 instance profile / IMDSv2.
-      # Set explicitly to use access key + secret (+ optional session token
-      # for STS temporary credentials / SSO / AssumeRole).
+      # AWS credentials: leave empty to use EC2 instance profile / IMDSv2
+      # (recommended for production). Set explicitly to use access key + secret
+      # (+ optional session token for STS temporary credentials / SSO /
+      # AssumeRole), or use AWS_BEARER_TOKEN_BEDROCK for a Bedrock-scoped API key.
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      # Bedrock API key (boto3 >= 1.39). Alternative to IAM credentials,
+      # scoped to bedrock-runtime only. Takes precedence over the default
+      # credential chain when set.
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
     volumes:
       # Bind mount the host directory that atop writes into. Swap the left
       # hand side if your host stores rawlog files elsewhere, for example

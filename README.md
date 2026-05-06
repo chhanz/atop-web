@@ -19,7 +19,7 @@ users who want to inspect atop captures without learning the curses interface.
 - Process (tstat) drill down: click a time point to see per process CPU, memory,
   disk, and network counters
 - Runs entirely in Docker, no host Python required
-- AI briefing and chat (Bedrock / OpenAI / Anthropic / Gemini)
+- AI briefing and chat (AWS Bedrock; OpenAI / Anthropic / Gemini scaffolded, not yet implemented)
 
 ## Project layout
 
@@ -195,11 +195,63 @@ Then open http://localhost:18000/ in a browser.
 | `ATOP_LOG_DIR`    | `/var/log/atop`  | Directory containing atop rawlog files; drives the server file browser. Leave empty or set to a non existent path to disable the browser and rely on uploads only. |
 | `ATOP_ROOT_PATH`  | `""`             | External URL prefix when running behind a prefix stripping proxy (injected as HTML `<base href>`; do not include a trailing slash) |
 | `HOST_PORT`       | `8000`           | Host port for the optional local debug mapping                 |
+| `LLM_PROVIDER`    | `none`           | LLM backend selector. Currently only `bedrock` is functional; `ollama`, `openai`, `anthropic`, `gemini` are scaffolded but not yet implemented. Leave as `none` to disable AI briefing and chat. |
+| `BEDROCK_MODEL`   | `global.anthropic.claude-sonnet-4-6` | Bedrock inference profile or model id (used when `LLM_PROVIDER=bedrock`). |
+| `AWS_REGION`      | `ap-northeast-2` | AWS region for Bedrock Runtime. `AWS_DEFAULT_REGION` is also honored. |
+| `AWS_ACCESS_KEY_ID` | _(empty)_      | Optional static credentials. Leave empty to use the EC2 instance profile / IMDSv2 / default boto3 credential chain. |
+| `AWS_SECRET_ACCESS_KEY` | _(empty)_  | Paired with `AWS_ACCESS_KEY_ID`. |
+| `AWS_SESSION_TOKEN` | _(empty)_      | For STS temporary credentials (SSO / AssumeRole). |
+| `AWS_BEARER_TOKEN_BEDROCK` | _(empty)_ | Bedrock API key (boto3 >= 1.39). Alternative to IAM credentials, scoped to `bedrock-runtime` only. Takes precedence over the default credential chain when set. |
 
 Leave `ATOP_ROOT_PATH` empty for root deployment. Set it to the external
 prefix (for example `/atop`) when running behind a reverse proxy that strips
 that prefix before forwarding; see the reverse proxy section above for the
 full configuration.
+
+### Enabling AI features
+
+AI briefing and chat are disabled by default (`LLM_PROVIDER=none`). To enable
+them with AWS Bedrock:
+
+1. Authenticate the host to Bedrock. Choose one of the following, in order of
+   preference:
+
+   - **EC2 instance profile (strongly recommended for production)** - attach
+     an IAM role to the EC2 instance with `bedrock:InvokeModel`,
+     `bedrock:Converse`, and `bedrock:ConverseStream` permissions. No secrets
+     touch the host filesystem, credentials rotate automatically via IMDSv2,
+     and there is nothing to leak in `docker inspect`, shell history, or
+     compose files. This is the safest option and should be the default for
+     any non-local deployment.
+   - **Bedrock API key** - set `AWS_BEARER_TOKEN_BEDROCK` with a key minted
+     from the Bedrock console. Simpler than IAM for standalone or
+     non-EC2 hosts (requires boto3 >= 1.39, scoped to `bedrock-runtime` only).
+     Treat it as a long-lived secret: prefer a `.env` file outside the repo
+     or a secrets manager, never commit it.
+   - **Static IAM credentials** - set `AWS_ACCESS_KEY_ID` and
+     `AWS_SECRET_ACCESS_KEY` (plus `AWS_SESSION_TOKEN` for STS / SSO /
+     AssumeRole). Discouraged for production because long-lived access keys
+     are the most common source of AWS credential leaks.
+
+2. Grant model access for the chosen inference profile in the Bedrock
+   console (region-scoped).
+
+3. Export the non-secret variables before `docker compose up`:
+
+   ```bash
+   export LLM_PROVIDER=bedrock
+   export AWS_REGION=ap-northeast-2
+   export BEDROCK_MODEL=global.anthropic.claude-sonnet-4-6
+   docker compose up -d
+   ```
+
+   With an EC2 instance profile, that is all. If you are using an API key
+   or static credentials, also export them in the same shell (or put them
+   in a `.env` file that is excluded from version control).
+
+Other providers (`openai`, `anthropic`, `gemini`, `ollama`) are accepted by
+`LLM_PROVIDER` but currently raise `NotImplementedError`; they remain on the
+roadmap for future releases.
 
 ## API
 
