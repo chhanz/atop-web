@@ -56,7 +56,7 @@ def create_app(root_path: str | None = None) -> FastAPI:
 
     app = FastAPI(
         title="atop-web",
-        version="0.3.0",
+        version="0.3.1",
         description="Web based visualization for atop rawlog files.",
     )
 
