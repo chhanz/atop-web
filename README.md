@@ -6,6 +6,8 @@ atop-web reads atop binary rawlog files directly (no `atop -P` preprocessing
 required) and renders system and process level metrics in a browser. It targets
 users who want to inspect atop captures without learning the curses interface.
 
+![atop-web dashboard](docs/screenshots/dashboard.png)
+
 ## Features
 
 - Direct parsing of atop binary rawlog via `dissect.cstruct`
@@ -17,6 +19,7 @@ users who want to inspect atop captures without learning the curses interface.
 - Process (tstat) drill down: click a time point to see per process CPU, memory,
   disk, and network counters
 - Runs entirely in Docker, no host Python required
+- AI briefing and chat (Bedrock / OpenAI / Anthropic / Gemini)
 
 ## Project layout
 
@@ -31,9 +34,6 @@ atop_web/
   static/              index.html, app.js, style.css
 tests/                 pytest suite
 ```
-
-A future `atop_web/llm/` package is planned for Phase 2 to add optional
-assistant style analysis. Phase 1 is self contained and does not depend on it.
 
 ## Quick start
 
@@ -53,7 +53,7 @@ docker run -d --name atop-web \
   ghcr.io/chhanz/atop-web:latest
 ```
 
-Available tags: `latest`, `v0.3.0`, `v0.2.0`, `v0.1.0`. Image is ~200MB, runs on x86_64.
+Tags: `latest` and `vX.Y.Z` per release. See [GHCR](https://github.com/chhanz/atop-web/pkgs/container/atop-web) for all versions. Image is ~200MB, runs on x86_64.
 
 Then open `http://localhost:8000`. Files under `/var/log/atop` on the host
 appear in the "Server log directory" panel.
@@ -173,9 +173,7 @@ services:
       - "traefik.http.services.atop.loadbalancer.server.port=8000"
 ```
 
-The shipped `docker-compose.yml` already contains this layout, plus a
-`mkdocs-auth@file` middleware entry used on the author's deployment; remove
-that middleware if you do not have an equivalent file provider setup.
+The shipped `docker-compose.yml` already contains this layout.
 
 ### Local development (no reverse proxy)
 
@@ -223,7 +221,7 @@ The `/api/samples`, `/api/processes` and `/api/summary` endpoints accept a
 - Large rawlog files (hundreds of MB) are decoded lazily through an offset
   index and an mmap over the file, so the parser keeps Python heap usage flat
   regardless of the capture size. Set `ATOP_LAZY=0` to fall back to the
-  pre-Phase-22 eager decoder if the lazy path hits a regression.
+  eager decoder if the lazy path hits a regression.
 - The chart endpoints (`/api/samples/system_*`) downsample to one sample per
   minute on windows longer than a minute. Sub-minute windows keep full
   per-sample resolution for tooltip accuracy.
@@ -236,14 +234,23 @@ The `/api/samples`, `/api/processes` and `/api/summary` endpoints accept a
 
 ## Compatibility
 
-atop-web targets the rawlog format produced by current atop releases. The
-binary layout is defined in `atop_web/parser/layouts/*.cdef`; adding support
-for a different rawlog revision is a matter of adding a new CDEF file. The
-parser is an independent implementation and makes no claim of compatibility
-with other third party tooling.
+atop-web parses rawlogs produced by the following atop releases, validated
+against in-house captures on 2026-05-06:
 
-See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the full atop version
-and OS compatibility matrix.
+| OS                 | atop   | Status    |
+| ------------------ | ------ | --------- |
+| RHEL 8.10 / 9.7    | 2.7.1  | Supported |
+| RHEL 10.1          | 2.11.1 | Supported |
+| Ubuntu 24.04       | 2.10.0 | Supported |
+| Ubuntu 26.04       | 2.12.1 | Supported |
+| SLES 15-SP7 / 16.0 | 2.11.1 | Supported |
+| Amazon Linux 2     | 2.7.1  | Supported |
+| Amazon Linux 2023  | 2.12.x | Supported |
+
+The binary layout is defined in `atop_web/parser/layouts/*.cdef`; adding a new
+rawlog revision requires a new CDEF and a `SPEC_...` entry in `reader.py`.
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the full matrix,
+dispatch internals, and the validation snippet for new atop versions.
 
 ## License
 
