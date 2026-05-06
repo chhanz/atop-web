@@ -21,3 +21,6 @@ logs/
 
 # local hermes workspace
 .hermes/
+
+# local compose override (deployment specific, not shipped)
+docker-compose.override.yml
